@@ -8,4 +8,4 @@ from tools.connection import health, test_connection
 from tools.diagnostics import config_diagnostics
 from tools.profiles import list_profiles, switch_profile
 from tools.metadata import describe_table, list_databases, list_tables
-from tools.query import execute_select_query
+from tools.query import execute_query, execute_select_query

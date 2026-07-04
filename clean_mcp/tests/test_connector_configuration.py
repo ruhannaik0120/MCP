@@ -1,5 +1,9 @@
 """Backend-specific configuration mapping tests that require no live secrets."""
 
+from contextlib import contextmanager
+
+import pytest
+
 from config import Config
 from connectors.mysql.connector import MySQLConnector
 from connectors.postgresql.connector import PostgreSQLConnector
@@ -70,3 +74,56 @@ def test_snowflake_connection_arguments(monkeypatch):
         "warehouse": "COMPUTE_WH",
         "role": "QA_ROLE",
     }
+
+
+class _WriteCursor:
+    description = None
+    rowcount = 2
+
+    def execute(self, query):
+        self.query = query
+
+    def close(self):
+        return None
+
+
+class _WriteConnection:
+    def __init__(self):
+        self.cursor_object = _WriteCursor()
+        self.committed = False
+
+    def cursor(self):
+        return self.cursor_object
+
+    def commit(self):
+        self.committed = True
+
+
+@pytest.mark.parametrize(
+    ("db_type", "connector_class"),
+    [
+        ("mysql", MySQLConnector),
+        ("postgresql", PostgreSQLConnector),
+        ("snowflake", SnowflakeConnector),
+    ],
+)
+def test_transactional_connectors_commit_writes(monkeypatch, db_type, connector_class):
+    _configure(monkeypatch, db_type)
+    monkeypatch.setenv("DB_EXECUTION_MODE", "read_write")
+    Config.load()
+    connector = connector_class()
+    connection = _WriteConnection()
+
+    @contextmanager
+    def fake_connection(*args, **kwargs):
+        yield connection
+
+    monkeypatch.setattr(connector, "_connection", fake_connection)
+
+    result = connector.execute_query(
+        "UPDATE demo_items SET status = 'verified'",
+        execution_mode="read_write",
+    )
+
+    assert connection.committed is True
+    assert result["rows_affected"] == 2

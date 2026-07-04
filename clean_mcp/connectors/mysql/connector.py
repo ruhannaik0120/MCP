@@ -173,8 +173,11 @@ class MySQLConnector(DatabaseConnector):
             cursor = conn.cursor()
             cursor.execute(limited_query)
             payload = self._fetch_rows(cursor, max_rows or profile.max_rows)
+            rows_affected = cursor.rowcount if cursor.description is None else len(payload["rows"])
+            if (execution_mode or profile.execution_mode).strip().lower() == "read_write":
+                conn.commit()
             cursor.close()
-        return {"connector_type": self.__class__.__name__, "db_type": profile.db_type, "database": target_database, "columns": payload["columns"], "rows": payload["rows"]}
+        return {"connector_type": self.__class__.__name__, "db_type": profile.db_type, "database": target_database, "columns": payload["columns"], "rows": payload["rows"], "rows_affected": rows_affected}
 
     def close(self) -> None:
         return None

@@ -142,6 +142,33 @@ def test_row_limit_validation_blocks_non_select_query(monkeypatch):
     assert response["error"]["code"] == ErrorCode.QUERY_BLOCKED
 
 
+def test_read_write_server_executes_write_statement(monkeypatch):
+    _configure_settings(monkeypatch)
+    monkeypatch.setenv("DB_EXECUTION_MODE", "read_write")
+    Config.load()
+    connector = FakeConnector()
+    service = QueryService(connector)
+
+    response = service.execute_select_query(sql="UPDATE items SET active = 1").to_dict()
+
+    assert response["success"] is True
+    assert connector.calls[0][0] == "execute_query"
+    assert connector.calls[0][-1] == "read_write"
+
+
+def test_read_only_server_rejects_request_level_write_elevation(monkeypatch):
+    _configure_settings(monkeypatch)
+    service = QueryService(FakeConnector())
+
+    response = service.execute_select_query(
+        sql="UPDATE items SET active = 1",
+        execution_mode="read_write",
+    ).to_dict()
+
+    assert response["success"] is False
+    assert response["error"]["code"] == ErrorCode.CONFIG_INVALID
+
+
 def test_request_row_limit_cannot_exceed_configured_cap(monkeypatch):
     _configure_settings(monkeypatch)
     connector = FakeConnector()

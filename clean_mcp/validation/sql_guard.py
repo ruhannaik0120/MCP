@@ -69,8 +69,14 @@ def validate_query(sql: str, execution_mode: str = "read_only") -> tuple[bool, s
         return False, "Query blocked - multiple statements are not permitted."
 
     stripped = stripped_for_comments.upper()
-    if execution_mode != "read_only":
-        return False, "Only read_only execution mode is permitted."
+    if execution_mode not in {"read_only", "read_write"}:
+        return False, "Execution mode must be read_only or read_write."
+
+    # In read-write mode the database user's own permissions are authoritative.
+    # The framework still requires one unambiguous statement per tool call.
+    if execution_mode == "read_write":
+        return True, ""
+
     if not (stripped.startswith("SELECT") or stripped.startswith("WITH")):
         return False, "Only SELECT statements are permitted."
 

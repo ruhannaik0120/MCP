@@ -21,10 +21,10 @@ def test_validate_query_blocks_write_keyword_in_read_only_mode():
     assert "only select" in reason.lower() or "forbidden" in reason.lower()
 
 
-def test_validator_does_not_accept_write_statement_even_with_unknown_mode():
+def test_validator_accepts_write_statement_in_read_write_mode():
     ok, reason = validate_query("UPDATE users SET is_active = 1", execution_mode="read_write")
-    assert ok is False
-    assert "read_only" in reason.lower()
+    assert ok is True
+    assert reason == ""
 
 
 def test_validate_query_allows_cte():

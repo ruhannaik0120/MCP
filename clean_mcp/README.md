@@ -2,7 +2,7 @@
 
 Production-oriented connector foundation for the controlled execution layer of an AI-driven QA automation system.
 
-An AI orchestrator can retrieve requirements, draft validation instructions, and request approval. This framework owns the next boundary: selecting an approved enterprise connection, validating an approved read-only query, executing it through MCP, and returning structured, auditable evidence. The AI never receives database credentials and never connects directly to a data platform.
+An AI orchestrator can retrieve requirements, draft validation instructions, and request approval. This framework owns the next boundary: selecting an approved enterprise connection, validating an approved statement, executing it through MCP under the configured permission mode, and returning structured, auditable evidence. The AI never receives database credentials and never connects directly to a data platform.
 
 ## System Position
 
@@ -31,7 +31,7 @@ This repository is the reusable MCP execution-layer foundation intended to integ
 - Mandatory `confirm=true` approval signal before a system transition.
 - Atomic switch validation, connectivity test, and rollback on failure.
 - Credentials remain in local environment configuration and are redacted from diagnostics.
-- Read-only SQL policy, single-statement enforcement, bounded row limits, and timeouts.
+- Configurable read-only or read-write execution, single-statement enforcement, bounded row limits, and timeouts.
 - Stable JSON response envelopes, structured errors, request IDs, JSON logs, and per-request artifacts.
 - Architecture tests preventing database-driver imports outside `connectors/`.
 
@@ -47,7 +47,8 @@ This repository is the reusable MCP execution-layer foundation intended to integ
 | `tool_list_databases` | Lists visible databases. |
 | `tool_list_tables` | Lists tables by database/schema. |
 | `tool_describe_table` | Returns column metadata. |
-| `tool_execute_select_query` | Executes one approved read-only statement. |
+| `tool_execute_query` | Executes one statement using the configured permission mode. |
+| `tool_execute_select_query` | Compatibility alias for existing MCP clients. |
 
 ## Runtime Switching
 
@@ -57,7 +58,7 @@ Define named profiles in `.env` through `DB_PROFILES_JSON`. Real passwords must 
 DB_TYPE=demo
 DB_DATABASE=qa_demo
 DB_ACTIVE_PROFILE=demo-local
-DB_PROFILES_JSON={"demo-local":{"db_type":"demo","database":"qa_demo"},"postgres-local":{"db_type":"postgresql","host":"localhost","database":"qa_demo","username":"qa_user","password":"secret","connection_options":{"port":5432}}}
+DB_PROFILES_JSON={"demo-local":{"db_type":"demo","database":"qa_demo","execution_mode":"read_write"},"postgres-local":{"db_type":"postgresql","host":"localhost","database":"qa_demo","username":"qa_user","password":"secret","execution_mode":"read_write","connection_options":{"port":5432}}}
 ```
 
 Expected agent flow:
@@ -90,13 +91,14 @@ VS Code discovers the server through `.vscode/mcp.json`. Reload VS Code after se
 
 ## Safety Contract
 
-- This version permits `read_only` execution only. Tool arguments cannot elevate access.
+- `DB_EXECUTION_MODE` selects `read_only` or `read_write`; tool arguments cannot elevate beyond the configured mode.
+- In `read_write` mode, INSERT, UPDATE, DELETE, DDL, and administrative statements are passed to the selected database connector.
 - Request row limits can reduce but never exceed the configured `DB_MAX_ROWS` ceiling (maximum 10,000).
 - Request timeouts can reduce but never exceed the configured `DB_TIMEOUT_SECONDS` ceiling.
 - The framework requires human approval before profile transitions.
 - Profiles and diagnostics expose presence flags, never passwords or tokens.
 - The MCP core accesses databases only through `ConnectorFactory -> DatabaseConnector`.
-- External database permissions remain the final enforcement layer; use read-only database users.
+- External database permissions remain the final enforcement layer; grant only the write permissions required by the workflow.
 - Every request produces a traceable ID, structured log, and execution artifact.
 
 ## Repository Map
@@ -107,7 +109,7 @@ config.py                 Generic validated configuration
 connectors/               Stable interface, factory, backend implementations
 services/                 Orchestration and atomic profile switching
 tools/                    Thin agent-facing wrappers
-validation/               Read-only SQL policy
+validation/               Execution-mode and statement validation
 models/                   Stable response and error contracts
 artifacts/                Generated logs and execution evidence
 tests/                    Unit, policy, and architecture tests
@@ -119,9 +121,9 @@ To add SAP, Oracle, Databricks, or another system, follow [docs/ADDING_CONNECTOR
 
 ## Verified Versus Configured
 
-The release gate currently passes **50 automated tests**. It also verifies all
-**nine MCP tools**, the real `stdio` protocol handshake, profile approval,
-successful switching, failed-switch rollback, read-only rejection, dependency
+The release gate currently passes **55 automated tests**. It also verifies all
+**ten MCP tools**, the real `stdio` protocol handshake, profile approval,
+successful switching, failed-switch rollback, permission-mode enforcement, dependency
 integrity, and backend-specific configuration mapping.
 
 | Connector | Implemented | Automated-tested | Live-verified |

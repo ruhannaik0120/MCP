@@ -18,15 +18,15 @@ For each configured profile:
 4. Capture successful connection metadata.
 5. Call `tool_list_tables` with the correct schema (`public`, `dbo`, or `PUBLIC`).
 6. Execute `SELECT 1 AS health_check`.
-7. Execute `DELETE FROM demo_table` and capture the structured rejection.
+7. In `read_write` mode, execute a write against disposable sample data and verify `rows_affected`.
 8. Capture the matching JSON artifact and log request ID.
 
-Use read-only accounts and sanitized local data. Never capture `.env`, passwords, tokens, private account identifiers, or company data.
+Use least-privilege accounts and disposable, sanitized local data. Never capture `.env`, passwords, tokens, private account identifiers, or company data.
 
 ## Suggested Agent Prompt
 
 ```text
-Use the MCP execution framework. List the configured connection profiles without exposing credentials. Ask me before every profile switch. After I approve, switch with confirm=true, verify connectivity, list accessible tables, run SELECT 1 AS health_check, and show the request ID. Do not execute writes or reveal configuration secrets.
+Use the MCP execution framework. List the configured connection profiles without exposing credentials. Ask me before every profile switch. After I approve, switch with confirm=true, verify connectivity, list accessible tables, run SELECT 1 AS health_check, and show the request ID. Execute writes only when I request them and never reveal configuration secrets.
 ```
 
 ## Evidence Record

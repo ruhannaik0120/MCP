@@ -11,7 +11,7 @@ The AI-agnostic orchestrator owns requirement interpretation, query generation, 
 3. It switches using `confirm=true`.
 4. The framework validates the profile, creates the connector, and tests connectivity.
 5. Failure restores the previous connector; success makes the new profile active.
-6. The orchestrator submits approved read-only queries.
+6. The orchestrator submits approved statements within the active profile's permission mode.
 7. The framework returns results and writes correlated evidence.
 
 This allows one MCP workspace and one stable tool surface to move among SQL Server, PostgreSQL, MySQL, Snowflake, and future systems.
@@ -19,7 +19,7 @@ This allows one MCP workspace and one stable tool surface to move among SQL Serv
 ## Production Rules
 
 - Run the MCP process under a dedicated OS identity.
-- Use least-privilege, read-only database users.
+- Use least-privilege database users with only the reads and writes required by the workflow.
 - Inject secrets from an approved secret manager or environment, never source control.
 - Keep approval state upstream; `confirm=true` is the execution-boundary assertion.
 - Correlate reports using `request_id`.

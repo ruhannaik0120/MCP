@@ -29,3 +29,27 @@ def execute_select_query(
         max_rows=max_rows,
         execution_mode=execution_mode,
     ).to_dict()
+
+
+def execute_query(
+    sql: str = "",
+    query: str = "",
+    database: str = "",
+    schema: str = "",
+    environment: str = "",
+    timeout_seconds: int | None = None,
+    max_rows: int | None = None,
+    execution_mode: str = "",
+) -> dict:
+    """Execute a statement using the server's configured permission mode."""
+
+    return query_service.execute_query(
+        sql=sql,
+        query=query,
+        database=database,
+        schema=schema,
+        environment=environment,
+        timeout_seconds=timeout_seconds,
+        max_rows=max_rows,
+        execution_mode=execution_mode,
+    ).to_dict()

@@ -15,7 +15,7 @@
 - Confirm `.env` and credentials are not visible.
 - Start with the offline `demo-local` profile.
 - Verify each live profile separately and record only successful claims.
-- Keep every database account read-only.
+- Use disposable sample data and least-privilege database accounts.
 - Close unrelated windows and company-sensitive material.
 
 ## Screenshot Sequence
@@ -34,7 +34,7 @@
 ## Agent Prompt
 
 ```text
-Use the MCP execution framework. List configured profiles without exposing credentials. Ask me for explicit approval before each profile switch. After approval, switch with confirm=true, verify connectivity, run SELECT 1 AS health_check, and report the request ID. Never execute writes and never reveal secrets.
+Use the MCP execution framework. List configured profiles without exposing credentials. Ask me for explicit approval before each profile switch. After approval, switch with confirm=true, verify connectivity, run SELECT 1 AS health_check, and report the request ID. Execute writes only when I request them and never reveal secrets.
 ```
 
 ## Honest Support Statement

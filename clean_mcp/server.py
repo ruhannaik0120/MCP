@@ -13,6 +13,7 @@ from logger import logger
 from tools import (
     config_diagnostics,
     describe_table,
+    execute_query,
     execute_select_query,
     health,
     list_databases,
@@ -112,6 +113,26 @@ def tool_describe_table(
     """Return table metadata for a single table."""
 
     return json.dumps(describe_table(database, table, schema, environment, timeout_seconds), indent=2, default=str)
+
+
+@mcp.tool()
+def tool_execute_query(
+    sql: str = "",
+    query: str = "",
+    database: str = "",
+    schema: str = "",
+    environment: str = "",
+    timeout_seconds: int | None = None,
+    max_rows: int | None = None,
+    execution_mode: str = "",
+) -> str:
+    """Execute one SQL statement using the configured permission mode."""
+
+    return json.dumps(
+        execute_query(sql, query, database, schema, environment, timeout_seconds, max_rows, execution_mode),
+        indent=2,
+        default=str,
+    )
 
 
 @mcp.tool()

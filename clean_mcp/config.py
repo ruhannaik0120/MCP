@@ -153,8 +153,8 @@ class Config:
 
         if cls.LOG_LEVEL not in logging._nameToLevel:
             errors.append("LOG_LEVEL must be a valid logging level.")
-        if cls.GLOBAL_EXECUTION_MODE != "read_only":
-            errors.append("DB_EXECUTION_MODE must be read_only. Write execution is not enabled by this framework version.")
+        if cls.GLOBAL_EXECUTION_MODE not in {"read_only", "read_write"}:
+            errors.append("DB_EXECUTION_MODE must be read_only or read_write.")
         if cls.GLOBAL_MAX_ROWS <= 0:
             errors.append("DB_MAX_ROWS must be greater than zero.")
         elif cls.GLOBAL_MAX_ROWS > 10_000:

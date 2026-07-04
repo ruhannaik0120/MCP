@@ -579,23 +579,26 @@ class QueryService:
         timeout_seconds: int | None = None,
         max_rows: int | None = None,
         execution_mode: str = "",
+        _tool_name: str = "execute_select_query",
     ) -> ToolResponse:
-        request_id, request_token, environment_token, start_time, requested_environment = self._begin_request("execute_select_query")
+        request_id, request_token, environment_token, start_time, requested_environment = self._begin_request(_tool_name)
         statement = sql or query
         try:
             effective_execution_mode = (execution_mode or Config.GLOBAL_EXECUTION_MODE).strip().lower() or Config.GLOBAL_EXECUTION_MODE
-            if effective_execution_mode != "read_only":
-                raise ConfigError("Only read_only execution is enabled. Agent requests cannot elevate execution mode.")
+            if effective_execution_mode not in {"read_only", "read_write"}:
+                raise ConfigError("execution_mode must be read_only or read_write.")
+            if Config.GLOBAL_EXECUTION_MODE == "read_only" and effective_execution_mode == "read_write":
+                raise ConfigError("The request cannot elevate the server from read_only to read_write mode.")
             if max_rows is not None and max_rows <= 0:
                 raise ConfigError("max_rows must be greater than zero.")
             # Per-request limits may reduce, but never raise, the configured cap.
             row_limit = min(max_rows or Config.GLOBAL_MAX_ROWS, Config.GLOBAL_MAX_ROWS)
-            # Policy validation happens before connector dispatch, so unsafe SQL
-            # never reaches a database driver regardless of backend.
+            # Validation enforces read-only policy when configured and basic
+            # statement integrity when the server explicitly enables writes.
             valid, reason = validate_query(statement, execution_mode=effective_execution_mode)
             if not valid:
                 response = self._error(
-                    tool="execute_select_query",
+                    tool=_tool_name,
                     environment=Config.DB_TYPE.upper(),
                     code=ErrorCode.QUERY_BLOCKED,
                     message=reason,
@@ -610,7 +613,7 @@ class QueryService:
                 )
                 return self._finalize_request(
                     response,
-                    tool="execute_select_query",
+                    tool=_tool_name,
                     environment=Config.DB_TYPE.upper(),
                     request_id=request_id,
                     database=database or Config.DATABASE,
@@ -629,7 +632,7 @@ class QueryService:
             columns = payload.get("columns", [])
             rows = payload.get("rows", [])
             response = self._response(
-                tool="execute_select_query",
+                tool=_tool_name,
                 environment=Config.DB_TYPE.upper(),
                 success=True,
                 request_id=request_id,
@@ -641,6 +644,7 @@ class QueryService:
                     "execution_mode": effective_execution_mode,
                     "row_limit": row_limit,
                     "row_count": len(rows),
+                    "rows_affected": payload.get("rows_affected", len(rows)),
                     "columns": columns,
                     "rows": rows,
                 },
@@ -652,7 +656,7 @@ class QueryService:
             )
             return self._finalize_request(
                 response,
-                tool="execute_select_query",
+                tool=_tool_name,
                 environment=Config.DB_TYPE.upper(),
                 request_id=request_id,
                 database=target_database,
@@ -661,7 +665,7 @@ class QueryService:
             )
         except Exception as exc:
             response = self._handle_connector_error(
-                tool="execute_select_query",
+                tool=_tool_name,
                 requested_environment=requested_environment,
                 request_id=request_id,
                 start_time=start_time,
@@ -670,7 +674,7 @@ class QueryService:
             )
             return self._finalize_request(
                 response,
-                tool="execute_select_query",
+                tool=_tool_name,
                 environment=requested_environment,
                 request_id=request_id,
                 database=database or Config.DATABASE,
@@ -680,6 +684,11 @@ class QueryService:
         finally:
             reset_request_id(request_token)
             reset_environment(environment_token)
+
+    def execute_query(self, **kwargs) -> ToolResponse:
+        """Execute through the generic tool while preserving the legacy alias."""
+
+        return self.execute_select_query(_tool_name="execute_query", **kwargs)
 
     def config_diagnostics(self) -> ToolResponse:
         request_id, request_token, environment_token, start_time, requested_environment = self._begin_request("config_diagnostics")
