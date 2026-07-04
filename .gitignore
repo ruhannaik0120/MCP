@@ -4,6 +4,7 @@
 clean_mcp/.env
 clean_mcp/artifacts/executions/*.json
 clean_mcp/artifacts/logs/*.log
+clean_mcp/artifacts/test-temp/
 **/__pycache__/
 *.py[cod]
 *.log

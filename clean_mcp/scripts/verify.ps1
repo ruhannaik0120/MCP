@@ -10,6 +10,8 @@ if (-not (Test-Path $Python)) {
 
 Push-Location $ProjectRoot
 try {
+    $TestTemp = Join-Path $ProjectRoot "artifacts\test-temp"
+    New-Item -ItemType Directory -Path $TestTemp -Force | Out-Null
     & $Python -m compileall -q .
     if ($LASTEXITCODE -ne 0) { throw "Compilation failed." }
     & $Python -m pytest -q
