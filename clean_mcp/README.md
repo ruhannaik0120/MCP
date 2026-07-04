@@ -31,7 +31,7 @@ This repository is the reusable MCP execution-layer foundation intended to integ
 - Mandatory `confirm=true` approval signal before a system transition.
 - Atomic switch validation, connectivity test, and rollback on failure.
 - Credentials remain in local environment configuration and are redacted from diagnostics.
-- Read-only SQL policy, single-statement enforcement, row limits, and timeouts.
+- Read-only SQL policy, single-statement enforcement, bounded row limits, and timeouts.
 - Stable JSON response envelopes, structured errors, request IDs, JSON logs, and per-request artifacts.
 - Architecture tests preventing database-driver imports outside `connectors/`.
 
@@ -68,6 +68,9 @@ Expected agent flow:
 4. The framework validates configuration, builds the connector, and tests connectivity.
 5. On failure, the previous profile is restored automatically.
 
+The connectivity check cannot be disabled through the MCP tool. A profile is
+only made active after its configuration validates and its target responds.
+
 ## Setup
 
 From the workspace root:
@@ -88,6 +91,8 @@ VS Code discovers the server through `.vscode/mcp.json`. Reload VS Code after se
 ## Safety Contract
 
 - This version permits `read_only` execution only. Tool arguments cannot elevate access.
+- Request row limits can reduce but never exceed the configured `DB_MAX_ROWS` ceiling (maximum 10,000).
+- Request timeouts can reduce but never exceed the configured `DB_TIMEOUT_SECONDS` ceiling.
 - The framework requires human approval before profile transitions.
 - Profiles and diagnostics expose presence flags, never passwords or tokens.
 - The MCP core accesses databases only through `ConnectorFactory -> DatabaseConnector`.
@@ -114,4 +119,20 @@ To add SAP, Oracle, Databricks, or another system, follow [docs/ADDING_CONNECTOR
 
 ## Verified Versus Configured
 
-All connector implementations and offline behavior are covered by automated tests. A connector is only claimed as locally verified after `tool_test_connection` and a safe query succeed against that platform. Record those results using [docs/LOCAL_TESTING.md](docs/LOCAL_TESTING.md); never imply external connectivity that was not actually tested.
+The release gate currently passes **50 automated tests**. It also verifies all
+**nine MCP tools**, the real `stdio` protocol handshake, profile approval,
+successful switching, failed-switch rollback, read-only rejection, dependency
+integrity, and backend-specific configuration mapping.
+
+| Connector | Implemented | Automated-tested | Live-verified |
+|---|---:|---:|---:|
+| Offline demo | Yes | Yes | Yes (`stdio` MCP client) |
+| SQL Server | Yes | Yes | Pending local SQL Server networking/authentication |
+| PostgreSQL | Yes | Yes | Pending profile credentials and query execution |
+| MySQL | Yes | Yes | Pending local server/profile configuration |
+| Snowflake | Yes | Yes | Pending account profile and query execution |
+
+A database connector is only called live-verified after `tool_test_connection`
+and a safe query succeed against that platform. Record results using
+[docs/LOCAL_TESTING.md](docs/LOCAL_TESTING.md); never imply external
+connectivity that was not actually tested.
