@@ -23,6 +23,14 @@ Jira / Requirements -> AI-Agnostic Orchestrator -> Human Approval
 
 This repository is the reusable MCP execution-layer foundation intended to integrate into the larger system. Jira retrieval, AI reasoning, memory, and reporting remain separate components with explicit contracts.
 
+## Architecture Overview
+
+[![AI-Driven QA Automation Framework architecture](docs/assets/qa-automation-architecture.png)](docs/assets/qa-automation-architecture.png)
+
+The highlighted inner boundary shows the current workflow and implemented MCP
+foundation. Components outside that boundary represent target production
+expansion, including future enterprise connectors and reporting integrations.
+
 ## Capabilities
 
 - AI-client agnostic MCP server using standard `stdio` transport.
