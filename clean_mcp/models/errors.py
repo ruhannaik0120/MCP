@@ -26,6 +26,8 @@ class StructuredError:
     detail: str | None = None
     hint: str | None = None
     retryable: bool = False
+    # Context contains safe diagnostic metadata only; credentials must never be
+    # attached to an error returned to an AI client.
     context: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

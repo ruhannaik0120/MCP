@@ -7,7 +7,13 @@ from typing import Any
 
 
 class DatabaseConnector(ABC):
-    """Abstract interface for backend-specific database connectors."""
+    """Stable contract implemented by every database backend.
+
+    The MCP tools and service layer depend on this interface rather than a
+    vendor driver. Consequently, adding another backend normally means adding
+    one connector implementation and one factory registration while leaving
+    the shared execution, logging, response, and profile-switching code intact.
+    """
 
     @abstractmethod
     def connect(self, database: str | None = None, timeout_seconds: int | None = None) -> Any:

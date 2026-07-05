@@ -191,6 +191,8 @@ class SnowflakeConnector(DatabaseConnector):
                 payload = self._fetch_rows(cursor, max_rows or profile.max_rows)
                 rows_affected = cursor.rowcount if cursor.description is None else len(payload["rows"])
                 if (execution_mode or profile.execution_mode).strip().lower() == "read_write":
+                    # Commit explicitly so behavior remains consistent even if
+                    # Snowflake autocommit settings are changed by a profile.
                     conn.commit()
             finally:
                 cursor.close()

@@ -8,6 +8,12 @@ from services.query_service import QueryService, get_query_service
 
 
 class _LazyQueryService:
+    """Resolve the cached service only when a tool is actually invoked.
+
+    Delayed construction lets startup configuration finish first and lets a
+    profile switch discard the old connector before the next request.
+    """
+
     def __getattr__(self, name: str):
         return getattr(get_query_service(), name)
 

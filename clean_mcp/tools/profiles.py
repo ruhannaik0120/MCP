@@ -4,6 +4,8 @@ from services.profile_service import list_connection_profiles, switch_connection
 
 
 def list_profiles() -> dict:
+    """List profile names and readiness flags without returning secrets."""
+
     return list_connection_profiles()
 
 

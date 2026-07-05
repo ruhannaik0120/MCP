@@ -588,6 +588,8 @@ class QueryService:
             if effective_execution_mode not in {"read_only", "read_write"}:
                 raise ConfigError("execution_mode must be read_only or read_write.")
             if Config.GLOBAL_EXECUTION_MODE == "read_only" and effective_execution_mode == "read_write":
+                # A tool argument may reduce permissions but cannot grant more
+                # authority than the server administrator configured.
                 raise ConfigError("The request cannot elevate the server from read_only to read_write mode.")
             if max_rows is not None and max_rows <= 0:
                 raise ConfigError("max_rows must be greater than zero.")
@@ -623,6 +625,8 @@ class QueryService:
 
             target_database = database or Config.DATABASE
             payload = self.connector.execute_query(
+                # QueryService owns policy and response behavior; the selected
+                # connector owns dialect details and transaction semantics.
                 statement,
                 database=target_database,
                 timeout_seconds=self._effective_timeout(timeout_seconds),
@@ -686,7 +690,11 @@ class QueryService:
             reset_environment(environment_token)
 
     def execute_query(self, **kwargs) -> ToolResponse:
-        """Execute through the generic tool while preserving the legacy alias."""
+        """Execute through the generic tool while preserving the legacy alias.
+
+        Both public tools share one implementation, but responses retain the
+        correct tool name for logs, artifacts, and management screenshots.
+        """
 
         return self.execute_select_query(_tool_name="execute_query", **kwargs)
 

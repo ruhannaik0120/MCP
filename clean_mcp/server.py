@@ -29,6 +29,7 @@ mcp = FastMCP("mcp-execution-framework")
 logger.info("MCP Server initialising...")
 
 
+# Profile tools expose safe profile metadata and approval-gated switching.
 @mcp.tool()
 def tool_list_connection_profiles() -> str:
     """List configured connection profiles without exposing credentials."""
@@ -60,6 +61,8 @@ def tool_config_diagnostics() -> str:
     return json.dumps(config_diagnostics(), indent=2, default=str)
 
 
+# Connection and metadata tools let an agent inspect the active system without
+# embedding any database-specific behavior in the MCP transport layer.
 @mcp.tool()
 def tool_test_connection(environment: str = "", database: str = "", timeout_seconds: int | None = None) -> str:
     """Verify database connectivity and return server metadata.
@@ -128,6 +131,8 @@ def tool_execute_query(
 ) -> str:
     """Execute one SQL statement using the configured permission mode."""
 
+    # The generic tool supports the server's configured permission mode. The
+    # legacy select-named tool below remains available for existing clients.
     return json.dumps(
         execute_query(sql, query, database, schema, environment, timeout_seconds, max_rows, execution_mode),
         indent=2,

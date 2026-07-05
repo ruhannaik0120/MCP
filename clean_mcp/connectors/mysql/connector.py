@@ -175,6 +175,7 @@ class MySQLConnector(DatabaseConnector):
             payload = self._fetch_rows(cursor, max_rows or profile.max_rows)
             rows_affected = cursor.rowcount if cursor.description is None else len(payload["rows"])
             if (execution_mode or profile.execution_mode).strip().lower() == "read_write":
+                # MySQL does not persist transactional writes until commit.
                 conn.commit()
             cursor.close()
         return {"connector_type": self.__class__.__name__, "db_type": profile.db_type, "database": target_database, "columns": payload["columns"], "rows": payload["rows"], "rows_affected": rows_affected}
