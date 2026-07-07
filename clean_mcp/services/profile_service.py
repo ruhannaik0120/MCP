@@ -29,6 +29,8 @@ _active_profile = os.getenv("DB_ACTIVE_PROFILE", "default").strip() or "default"
 
 
 def _profiles() -> dict[str, dict[str, Any]]:
+    """Parse named profiles from JSON without exposing them outside this module."""
+
     raw = os.getenv("DB_PROFILES_JSON", "").strip()
     if not raw:
         return {}
@@ -49,6 +51,8 @@ def _profiles() -> dict[str, dict[str, Any]]:
 
 
 def _safe_profile(name: str, profile: dict[str, Any]) -> dict[str, Any]:
+    """Convert a profile into agent-safe metadata with no credential values."""
+
     # Return presence flags rather than credential values. The agent can reason
     # about available systems without ever receiving connection secrets.
     return {
@@ -75,12 +79,15 @@ def list_connection_profiles() -> dict[str, Any]:
 
 
 def _profile_environment(profile: dict[str, Any]) -> dict[str, str]:
+    """Translate profile fields into the environment keys consumed by Config."""
+
     db_type = str(profile.get("db_type", "")).strip().lower()
     if db_type not in SUPPORTED_CONNECTORS:
         supported = ", ".join(sorted(SUPPORTED_CONNECTORS))
         raise ConfigError(f"Profile db_type must be one of: {supported}.")
 
     values: dict[str, str] = {}
+    # Only fields explicitly present in the selected profile are transferred.
     for field, env_key in _PROFILE_ENV_KEYS.items():
         if field not in profile:
             continue

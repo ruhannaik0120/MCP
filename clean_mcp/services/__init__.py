@@ -15,6 +15,8 @@ class _LazyQueryService:
     """
 
     def __getattr__(self, name: str):
+        """Forward attribute access to the current cached QueryService."""
+
         return getattr(get_query_service(), name)
 
 

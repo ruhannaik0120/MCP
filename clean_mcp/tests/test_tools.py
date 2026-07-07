@@ -6,6 +6,8 @@ import tools.query as query_tools
 
 
 class FakeResponse:
+    """Provide the serializable response contract expected by tool wrappers."""
+
     def __init__(self, payload):
         self._payload = payload
 
@@ -14,6 +16,8 @@ class FakeResponse:
 
 
 class FakeService:
+    """Capture wrapper arguments without invoking production services."""
+
     def __init__(self):
         self.calls = []
 

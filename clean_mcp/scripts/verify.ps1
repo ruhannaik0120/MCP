@@ -1,5 +1,11 @@
+<#
+Runs the complete local quality gate: compilation, pytest, and an offline smoke
+test. Any failed stage stops the script and returns a failing process exit code.
+#>
+
 $ErrorActionPreference = "Stop"
 
+# Derive the shared virtual environment and fail early when setup was skipped.
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $WorkspaceRoot = Split-Path -Parent $ProjectRoot
 $Python = Join-Path $WorkspaceRoot ".venv\Scripts\python.exe"
@@ -10,12 +16,17 @@ if (-not (Test-Path $Python)) {
 
 Push-Location $ProjectRoot
 try {
+    # Keep test-created temporary files inside the ignored artifacts directory.
     $TestTemp = Join-Path $ProjectRoot "artifacts\test-temp"
     New-Item -ItemType Directory -Path $TestTemp -Force | Out-Null
+    # Redirect bytecode away from OneDrive-managed source caches, which can be
+    # temporarily locked by editors or an already-running MCP process.
+    $env:PYTHONPYCACHEPREFIX = Join-Path $TestTemp "pycache"
     & $Python -m compileall -q .
     if ($LASTEXITCODE -ne 0) { throw "Compilation failed." }
     & $Python -m pytest -q
     if ($LASTEXITCODE -ne 0) { throw "Test suite failed." }
+    # The deterministic demo connector verifies startup without live credentials.
     $env:DB_TYPE = "demo"
     $env:DB_DATABASE = "qa_demo"
     $env:DB_EXECUTION_MODE = "read_only"

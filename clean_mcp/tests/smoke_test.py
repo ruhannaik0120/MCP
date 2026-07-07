@@ -18,6 +18,8 @@ from connectors.factory import ConnectorFactory
 
 
 def main() -> int:
+    """Validate startup, artifacts, and one optional connector round trip."""
+
     try:
         print("Loading configuration...")
         Config.load()
@@ -53,6 +55,8 @@ def main() -> int:
 
 
 def _should_attempt_connection() -> bool:
+    """Attempt a live check only when required connection settings exist."""
+
     import os
 
     return os.getenv("DB_SMOKE_TEST_CONNECT", "false").strip().lower() in {"1", "true", "yes", "y", "on"}

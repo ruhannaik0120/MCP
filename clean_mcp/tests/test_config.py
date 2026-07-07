@@ -6,6 +6,8 @@ from config import Config, ConfigError
 
 
 def _configure_generic_settings(monkeypatch):
+    """Install a valid baseline so each test isolates one configuration rule."""
+
     monkeypatch.setenv("DB_TYPE", "sqlserver")
     monkeypatch.setenv("DB_HOST", "localhost")
     monkeypatch.setenv("DB_DATABASE", "devdb")

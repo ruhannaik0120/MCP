@@ -20,10 +20,15 @@ class ConnectorFactory:
 
     @staticmethod
     def supported_connectors() -> tuple[str, ...]:
+        """Return registered connector names in deterministic display order."""
+
         return tuple(sorted(SUPPORTED_CONNECTORS))
 
     @staticmethod
     def create(connector_type: str | None = None) -> DatabaseConnector:
+        """Build the requested connector, falling back to runtime configuration."""
+
+        # Normalization makes profile and environment values case-insensitive.
         connector_name = (connector_type or "").strip().lower()
         if not connector_name:
             from config import Config

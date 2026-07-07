@@ -8,6 +8,8 @@ FORBIDDEN_DRIVER_MODULES = {"pyodbc", "mysql", "psycopg", "snowflake"}
 
 
 def test_database_drivers_are_imported_only_by_connectors():
+    """Prevent tools and services from bypassing connector boundaries."""
+
     violations: list[str] = []
     for path in ROOT.rglob("*.py"):
         relative = path.relative_to(ROOT)

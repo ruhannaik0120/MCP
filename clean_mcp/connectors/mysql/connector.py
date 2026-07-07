@@ -14,6 +14,7 @@ class MySQLConnector(DatabaseConnector):
     """Connector implementation for MySQL via mysql-connector-python."""
 
     def _driver(self):
+        """Load the optional MySQL driver only when this backend is selected."""
         # Import on first use so installations that do not need MySQL can still
         # start the shared MCP framework.
         try:
@@ -23,15 +24,18 @@ class MySQLConnector(DatabaseConnector):
         return mysql.connector
 
     def _profile(self) -> ConnectionConfig:
+        """Return the active neutral profile after checking MySQL requirements."""
         profile = Config.connection_config()
         if not profile.host:
             raise ConfigError("DB_HOST is required for the MySQL connector.")
         return profile
 
     def _normalize_database(self, database: str | None, fallback: str) -> str:
+        """Select an explicit database or fall back to the configured default."""
         return (database or fallback or "").strip()
 
     def _connection_kwargs(self, profile: ConnectionConfig, database: str | None = None) -> dict[str, Any]:
+        """Translate framework configuration into MySQL driver arguments."""
         options = dict(profile.connection_options or {})
         port = int(options.pop("port", 3306))
         kwargs: dict[str, Any] = {
@@ -47,6 +51,7 @@ class MySQLConnector(DatabaseConnector):
         return kwargs
 
     def _row_limit_sql(self, sql: str, max_rows: int, execution_mode: str | None) -> str:
+        """Apply the configured result cap to read-only MySQL statements."""
         normalized_sql = sql.strip().rstrip(";")
         if (execution_mode or "read_only").strip().lower() != "read_only":
             return normalized_sql
@@ -59,12 +64,14 @@ class MySQLConnector(DatabaseConnector):
         return f"{normalized_sql} LIMIT {max_rows}"
 
     def _fetch_rows(self, cursor, max_rows: int | None = None) -> dict[str, Any]:
+        """Convert driver tuples into JSON-ready dictionaries by column name."""
         columns = [column[0] for column in cursor.description] if cursor.description else []
         raw_rows = cursor.fetchmany(max_rows) if columns and max_rows and hasattr(cursor, "fetchmany") else cursor.fetchall() if columns else []
         rows = [dict(zip(columns, row)) for row in raw_rows[:max_rows] if columns] if max_rows else [dict(zip(columns, row)) for row in raw_rows]
         return {"columns": columns, "rows": rows}
 
     def connect(self, database: str | None = None, timeout_seconds: int | None = None) -> Any:
+        """Open a MySQL connection with the active profile and timeout."""
         profile = self._profile()
         target_database = self._normalize_database(database, profile.database)
         kwargs = self._connection_kwargs(profile, target_database or None)
@@ -74,6 +81,7 @@ class MySQLConnector(DatabaseConnector):
 
     @contextlib.contextmanager
     def _connection(self, database: str | None = None, timeout_seconds: int | None = None):
+        """Yield an operation-scoped connection and always close it."""
         connection = self.connect(database=database, timeout_seconds=timeout_seconds)
         try:
             yield connection
@@ -81,6 +89,7 @@ class MySQLConnector(DatabaseConnector):
             connection.close()
 
     def test_connection(self, database: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """Verify connectivity and return a small non-secret server snapshot."""
         profile = self._profile()
         target_database = self._normalize_database(database, profile.database)
         with self._connection(database=target_database or None, timeout_seconds=timeout_seconds) as conn:
@@ -105,9 +114,11 @@ class MySQLConnector(DatabaseConnector):
         }
 
     def health_check(self, database: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """Reuse the lightweight connection test as the MySQL health check."""
         return self.test_connection(database=database, timeout_seconds=timeout_seconds)
 
     def list_databases(self, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """List databases visible to the configured MySQL account."""
         profile = self._profile()
         with self._connection(timeout_seconds=timeout_seconds) as conn:
             cursor = conn.cursor()
@@ -124,6 +135,7 @@ class MySQLConnector(DatabaseConnector):
         return {"connector_type": self.__class__.__name__, "db_type": profile.db_type, "count": len(payload["rows"]), "databases": payload["rows"]}
 
     def list_tables(self, database: str | None = None, schema: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """List tables and views through MySQL information_schema metadata."""
         profile = self._profile()
         target_database = self._normalize_database(database, profile.database)
         if not target_database:
@@ -144,6 +156,7 @@ class MySQLConnector(DatabaseConnector):
         return {"connector_type": self.__class__.__name__, "db_type": profile.db_type, "database": target_database, "schema": schema or "", "count": len(payload["rows"]), "tables": payload["rows"]}
 
     def describe_table(self, database: str | None = None, table: str | None = None, schema: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """Return ordered column definitions for one MySQL table."""
         if not table:
             raise ConfigError("Table name is required.")
         profile = self._profile()
@@ -166,6 +179,7 @@ class MySQLConnector(DatabaseConnector):
         return {"connector_type": self.__class__.__name__, "db_type": profile.db_type, "database": target_database, "schema": schema or target_database, "table": table, "column_count": len(payload["rows"]), "columns": payload["rows"]}
 
     def execute_query(self, query: str, *, database: str | None = None, timeout_seconds: int | None = None, max_rows: int | None = None, execution_mode: str | None = None) -> Any:
+        """Execute validated SQL and normalize read or committed write output."""
         profile = self._profile()
         target_database = self._normalize_database(database, profile.database)
         limited_query = self._row_limit_sql(query, max_rows or profile.max_rows, execution_mode or profile.execution_mode)
@@ -181,6 +195,7 @@ class MySQLConnector(DatabaseConnector):
         return {"connector_type": self.__class__.__name__, "db_type": profile.db_type, "database": target_database, "columns": payload["columns"], "rows": payload["rows"], "rows_affected": rows_affected}
 
     def close(self) -> None:
+        """Satisfy the connector contract; connections are already per-call."""
         return None
 
 

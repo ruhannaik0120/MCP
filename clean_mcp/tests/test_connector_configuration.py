@@ -10,6 +10,7 @@ from connectors.postgresql.connector import PostgreSQLConnector
 from connectors.snowflake.connector import SnowflakeConnector
 
 
+# Build profiles consistently so assertions focus on driver argument mapping.
 def _configure(monkeypatch, db_type: str, options: str = "{}") -> None:
     monkeypatch.setenv("DB_TYPE", db_type)
     monkeypatch.setenv("DB_HOST", "db.example.test")
@@ -23,6 +24,7 @@ def _configure(monkeypatch, db_type: str, options: str = "{}") -> None:
     Config.load()
 
 
+# Each backend receives the expected driver keywords, defaults, and options.
 def test_mysql_connection_arguments(monkeypatch):
     _configure(monkeypatch, "mysql", '{"port":3307,"ssl_disabled":true}')
 
@@ -76,7 +78,9 @@ def test_snowflake_connection_arguments(monkeypatch):
     }
 
 
+# Transaction doubles prove commit behavior without touching live databases.
 class _WriteCursor:
+    """Represent a write cursor with a deterministic affected-row count."""
     description = None
     rowcount = 2
 
@@ -88,6 +92,7 @@ class _WriteCursor:
 
 
 class _WriteConnection:
+    """Record whether a transactional connector commits an accepted write."""
     def __init__(self):
         self.cursor_object = _WriteCursor()
         self.committed = False
@@ -107,6 +112,7 @@ class _WriteConnection:
         ("snowflake", SnowflakeConnector),
     ],
 )
+# MySQL, PostgreSQL, and Snowflake must commit successful write statements.
 def test_transactional_connectors_commit_writes(monkeypatch, db_type, connector_class):
     _configure(monkeypatch, db_type)
     monkeypatch.setenv("DB_EXECUTION_MODE", "read_write")

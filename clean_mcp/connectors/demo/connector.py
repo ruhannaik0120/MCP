@@ -61,16 +61,20 @@ class DemoConnector(DatabaseConnector):
     """Deterministic connector used for offline demonstrations only."""
 
     def _profile(self) -> ConnectionConfig:
+        """Return the same neutral configuration used by live connectors."""
         return Config.connection_config()
 
     def _target_database(self, database: str | None) -> str:
+        """Resolve a requested demo database to a deterministic fallback."""
         profile = self._profile()
         return (database or profile.database or "qa_demo").strip() or "qa_demo"
 
     def connect(self, database: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """Return simulated connection context without opening a network socket."""
         return {"connector_type": self.__class__.__name__, "database": self._target_database(database), "mode": "demo"}
 
     def test_connection(self, database: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """Return a predictable successful connection snapshot for demos."""
         target_database = self._target_database(database)
         return {
             "connector_type": self.__class__.__name__,
@@ -86,12 +90,14 @@ class DemoConnector(DatabaseConnector):
         }
 
     def health_check(self, database: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """Return deterministic liveness data without external dependencies."""
         snapshot = self.test_connection(database=database, timeout_seconds=timeout_seconds)
         snapshot["mode"] = "offline_demo"
         snapshot["note"] = "Demo connector only. No external database is contacted."
         return snapshot
 
     def list_databases(self, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """List the in-memory sample databases exposed by this connector."""
         return {
             "connector_type": self.__class__.__name__,
             "db_type": "demo",
@@ -105,6 +111,8 @@ class DemoConnector(DatabaseConnector):
         schema: str | None = None,
         timeout_seconds: int | None = None,
     ) -> dict[str, Any]:
+        """List deterministic sample tables, optionally filtered by schema."""
+
         target_database = self._target_database(database)
         tables = _DEMO_TABLES.get(target_database, [])
         if schema:
@@ -125,6 +133,8 @@ class DemoConnector(DatabaseConnector):
         schema: str | None = None,
         timeout_seconds: int | None = None,
     ) -> dict[str, Any]:
+        """Return deterministic sample columns for a requested demo table."""
+
         target_database = self._target_database(database)
         columns = _DEMO_COLUMNS.get((target_database, table or ""), [])
         return {
@@ -146,6 +156,8 @@ class DemoConnector(DatabaseConnector):
         max_rows: int | None = None,
         execution_mode: str | None = None,
     ) -> Any:
+        """Return predictable rows for a small set of demonstration queries."""
+
         # Match a small deterministic query set so demonstrations remain useful
         # without pretending that this connector is a SQL execution engine.
         normalized = query.strip().rstrip(";").lower()
@@ -168,6 +180,7 @@ class DemoConnector(DatabaseConnector):
         }
 
     def close(self) -> None:
+        """Satisfy the connector lifecycle contract; no resource is open."""
         return None
 
 

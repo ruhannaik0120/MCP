@@ -10,6 +10,8 @@ from services import profile_service
 
 @pytest.fixture
 def profiles(monkeypatch):
+    """Install named profiles for discovery, switching, and rollback tests."""
+
     payload = {
         "demo-one": {"db_type": "demo", "database": "qa_demo"},
         "demo-two": {"db_type": "demo", "database": "sales"},

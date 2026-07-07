@@ -15,6 +15,7 @@ class SQLServerConnector(DatabaseConnector):
     """Connector implementation for SQL Server via pyodbc."""
 
     def _driver(self):
+        """Load pyodbc only when the SQL Server backend is selected."""
         # Lazy loading prevents an absent ODBC installation from breaking other
         # connectors during MCP server startup.
         try:
@@ -26,9 +27,11 @@ class SQLServerConnector(DatabaseConnector):
 
     @property
     def odbc_version(self) -> str:
+        """Return the installed pyodbc version for diagnostics."""
         return self._driver().version
 
     def _profile(self) -> ConnectionConfig:
+        """Return the active profile after checking SQL Server requirements."""
         profile = Config.connection_config()
         if not profile.host:
             raise ConfigError("DB_HOST is required for the SQL Server connector.")
@@ -37,9 +40,11 @@ class SQLServerConnector(DatabaseConnector):
         return profile
 
     def _normalize_database(self, database: str | None, fallback: str) -> str:
+        """Select an explicit database or the configured default."""
         return (database or fallback or "master").strip() or "master"
 
     def _connection_options(self, profile: ConnectionConfig) -> str:
+        """Build secure ODBC options from generic and SQL-specific settings."""
         options = dict(profile.connection_options or {})
         driver = str(options.pop("driver", "ODBC Driver 18 for SQL Server")).strip() or "ODBC Driver 18 for SQL Server"
         parts = [f"DRIVER={{{driver}}}", f"SERVER={profile.host}"]
@@ -67,9 +72,11 @@ class SQLServerConnector(DatabaseConnector):
         return ";".join(parts) + ";"
 
     def _build_connection_string(self, profile: ConnectionConfig, database: str) -> str:
+        """Compose the complete ODBC connection string for one database."""
         return self._connection_options(profile) + f"DATABASE={database};"
 
     def _row_limit_sql(self, sql: str, max_rows: int, execution_mode: str | None) -> str:
+        """Apply SQL Server TOP limits to eligible read-only statements."""
         normalized_sql = sql.strip()
         upper_sql = normalized_sql.upper()
 
@@ -98,6 +105,7 @@ class SQLServerConnector(DatabaseConnector):
         return normalized_sql
 
     def connect(self, database: str | None = None, timeout_seconds: int | None = None) -> Any:
+        """Open an ODBC connection using the active profile and timeout."""
         profile = self._profile()
         normalized_database = self._normalize_database(database, profile.database)
         conn_str = self._build_connection_string(profile, normalized_database)
@@ -141,6 +149,7 @@ class SQLServerConnector(DatabaseConnector):
 
     @contextlib.contextmanager
     def _connection(self, database: str | None = None, timeout_seconds: int | None = None):
+        """Yield an operation-scoped ODBC connection and always close it."""
         profile = self._profile()
         normalized_database = self._normalize_database(database, profile.database)
         connection = self.connect(database=normalized_database, timeout_seconds=timeout_seconds)
@@ -160,12 +169,14 @@ class SQLServerConnector(DatabaseConnector):
             )
 
     def _fetch_rows(self, cursor, max_rows: int | None = None) -> dict[str, Any]:
+        """Convert ODBC rows into JSON-ready dictionaries by column name."""
         columns = [column[0] for column in cursor.description] if cursor.description else []
         raw_rows = cursor.fetchmany(max_rows) if columns and max_rows and hasattr(cursor, "fetchmany") else cursor.fetchall() if columns else []
         rows = [dict(zip(columns, row)) for row in raw_rows[:max_rows] if columns] if max_rows else [dict(zip(columns, row)) for row in raw_rows]
         return {"columns": columns, "rows": rows}
 
     def test_connection(self, database: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """Verify connectivity and return safe SQL Server metadata."""
         profile = self._profile()
         target_database = self._normalize_database(database, profile.database)
         with self._connection(database=target_database, timeout_seconds=timeout_seconds) as conn:
@@ -190,6 +201,7 @@ class SQLServerConnector(DatabaseConnector):
         }
 
     def health_check(self, database: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """Return SQL Server liveness information through the common contract."""
         profile = self._profile()
         target_database = self._normalize_database(database, profile.database)
         snapshot = self.test_connection(database=target_database, timeout_seconds=timeout_seconds)
@@ -198,6 +210,7 @@ class SQLServerConnector(DatabaseConnector):
         return snapshot
 
     def list_databases(self, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """List online databases visible to the active SQL Server login."""
         profile = self._profile()
         with self._connection(database="master", timeout_seconds=timeout_seconds) as conn:
             cursor = conn.cursor()
@@ -227,6 +240,8 @@ class SQLServerConnector(DatabaseConnector):
         schema: str | None = None,
         timeout_seconds: int | None = None,
     ) -> dict[str, Any]:
+        """List SQL Server tables, optionally restricted to one schema."""
+
         profile = self._profile()
         target_database = self._normalize_database(database, profile.database)
         with self._connection(database=target_database, timeout_seconds=timeout_seconds) as conn:
@@ -262,6 +277,8 @@ class SQLServerConnector(DatabaseConnector):
         schema: str | None = None,
         timeout_seconds: int | None = None,
     ) -> dict[str, Any]:
+        """Return ordered information-schema columns for one SQL Server table."""
+
         if not table:
             raise ConfigError("Table name is required.")
 
@@ -306,6 +323,8 @@ class SQLServerConnector(DatabaseConnector):
         max_rows: int | None = None,
         execution_mode: str | None = None,
     ) -> Any:
+        """Execute validated SQL and normalize read or autocommitted write output."""
+
         profile = self._profile()
         target_database = self._normalize_database(database, profile.database)
         limited_query = self._row_limit_sql(query, max_rows or profile.max_rows, execution_mode or profile.execution_mode)
@@ -324,6 +343,7 @@ class SQLServerConnector(DatabaseConnector):
         }
 
     def close(self) -> None:
+        """Satisfy the connector contract; connections are already per-call."""
         return None
 
 

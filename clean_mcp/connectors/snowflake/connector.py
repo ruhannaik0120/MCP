@@ -14,6 +14,7 @@ class SnowflakeConnector(DatabaseConnector):
     """Connector implementation for Snowflake via snowflake-connector-python."""
 
     def _driver(self):
+        """Load the optional Snowflake driver only when selected."""
         # Snowflake is an optional and comparatively heavy dependency, so it is
         # imported only when this connector is actually selected.
         try:
@@ -23,6 +24,7 @@ class SnowflakeConnector(DatabaseConnector):
         return snowflake.connector
 
     def _profile(self) -> ConnectionConfig:
+        """Return the active profile after checking cloud account requirements."""
         profile = Config.connection_config()
         if not profile.host:
             raise ConfigError("DB_HOST is required for the Snowflake connector and should contain the account identifier.")
@@ -31,9 +33,11 @@ class SnowflakeConnector(DatabaseConnector):
         return profile
 
     def _normalize_database(self, database: str | None, fallback: str) -> str:
+        """Select an explicit database or the configured Snowflake default."""
         return (database or fallback or "").strip()
 
     def _connection_kwargs(self, profile: ConnectionConfig, database: str | None = None) -> dict[str, Any]:
+        """Translate neutral settings into Snowflake account/session arguments."""
         options = dict(profile.connection_options or {})
         schema = options.pop("schema", None)
         kwargs: dict[str, Any] = {
@@ -50,6 +54,7 @@ class SnowflakeConnector(DatabaseConnector):
         return kwargs
 
     def _row_limit_sql(self, sql: str, max_rows: int, execution_mode: str | None) -> str:
+        """Apply the configured result cap to read-only Snowflake statements."""
         normalized_sql = sql.strip().rstrip(";")
         if (execution_mode or "read_only").strip().lower() != "read_only":
             return normalized_sql
@@ -65,12 +70,14 @@ class SnowflakeConnector(DatabaseConnector):
         return f"{normalized_sql} LIMIT {max_rows}"
 
     def _fetch_rows(self, cursor, max_rows: int | None = None) -> dict[str, Any]:
+        """Convert Snowflake tuples into JSON-ready dictionaries."""
         columns = [column[0] for column in cursor.description] if cursor.description else []
         raw_rows = cursor.fetchmany(max_rows) if columns and max_rows and hasattr(cursor, "fetchmany") else cursor.fetchall() if columns else []
         rows = [dict(zip(columns, row)) for row in raw_rows[:max_rows] if columns] if max_rows else [dict(zip(columns, row)) for row in raw_rows]
         return {"columns": columns, "rows": rows}
 
     def connect(self, database: str | None = None, timeout_seconds: int | None = None) -> Any:
+        """Open a Snowflake session using the active account profile."""
         profile = self._profile()
         target_database = self._normalize_database(database, profile.database)
         kwargs = self._connection_kwargs(profile, target_database or None)
@@ -80,6 +87,7 @@ class SnowflakeConnector(DatabaseConnector):
 
     @contextlib.contextmanager
     def _connection(self, database: str | None = None, timeout_seconds: int | None = None):
+        """Yield an operation-scoped cloud session and always close it."""
         connection = self.connect(database=database, timeout_seconds=timeout_seconds)
         try:
             yield connection
@@ -87,6 +95,7 @@ class SnowflakeConnector(DatabaseConnector):
             connection.close()
 
     def test_connection(self, database: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """Verify the session and return non-secret account context."""
         profile = self._profile()
         target_database = self._normalize_database(database, profile.database)
         with self._connection(database=target_database or None, timeout_seconds=timeout_seconds) as conn:
@@ -113,9 +122,11 @@ class SnowflakeConnector(DatabaseConnector):
         }
 
     def health_check(self, database: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """Reuse the lightweight session test as the Snowflake health check."""
         return self.test_connection(database=database, timeout_seconds=timeout_seconds)
 
     def list_databases(self, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """List databases visible to the active Snowflake role."""
         profile = self._profile()
         with self._connection(timeout_seconds=timeout_seconds) as conn:
             cursor = conn.cursor()
@@ -133,6 +144,7 @@ class SnowflakeConnector(DatabaseConnector):
         return {"connector_type": self.__class__.__name__, "db_type": profile.db_type, "count": len(payload["rows"]), "databases": payload["rows"]}
 
     def list_tables(self, database: str | None = None, schema: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """List tables and views for the requested database/schema scope."""
         profile = self._profile()
         target_database = self._normalize_database(database, profile.database)
         if not target_database:
@@ -156,6 +168,7 @@ class SnowflakeConnector(DatabaseConnector):
         return {"connector_type": self.__class__.__name__, "db_type": profile.db_type, "database": target_database, "schema": target_schema, "count": len(payload["rows"]), "tables": payload["rows"]}
 
     def describe_table(self, database: str | None = None, table: str | None = None, schema: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
+        """Return ordered column definitions for one Snowflake table."""
         if not table:
             raise ConfigError("Table name is required.")
         profile = self._profile()
@@ -181,6 +194,7 @@ class SnowflakeConnector(DatabaseConnector):
         return {"connector_type": self.__class__.__name__, "db_type": profile.db_type, "database": target_database, "schema": target_schema, "table": table, "column_count": len(payload["rows"]), "columns": payload["rows"]}
 
     def execute_query(self, query: str, *, database: str | None = None, timeout_seconds: int | None = None, max_rows: int | None = None, execution_mode: str | None = None) -> Any:
+        """Execute validated SQL and normalize read or committed write output."""
         profile = self._profile()
         target_database = self._normalize_database(database, profile.database)
         limited_query = self._row_limit_sql(query, max_rows or profile.max_rows, execution_mode or profile.execution_mode)
@@ -199,6 +213,7 @@ class SnowflakeConnector(DatabaseConnector):
         return {"connector_type": self.__class__.__name__, "db_type": profile.db_type, "database": target_database, "columns": payload["columns"], "rows": payload["rows"], "rows_affected": rows_affected}
 
     def close(self) -> None:
+        """Satisfy the connector contract; sessions are already per-call."""
         return None
 
 

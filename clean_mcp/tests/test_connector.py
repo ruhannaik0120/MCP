@@ -4,7 +4,9 @@ from config import Config
 from connectors.sqlserver.connector import SQLServerConnector
 
 
+# These ODBC doubles verify connector behavior without a live SQL Server.
 class FakeCursor:
+    """Return deterministic metadata rows for connector assertions."""
     def __init__(self):
         self.description = [("server_name",), ("version",), ("logged_in_user",), ("utc_time",)]
         self._rows = [("server", "version", "user", "time")]
@@ -21,6 +23,7 @@ class FakeCursor:
 
 
 class FakeConnection:
+    """Track cursor access and closure for lifecycle assertions."""
     def __init__(self):
         self.cursor_obj = FakeCursor()
         self.closed = False
@@ -34,6 +37,7 @@ class FakeConnection:
 
 
 class FakeDriver:
+    """Capture pyodbc arguments while returning an in-memory connection."""
     Error = RuntimeError
     version = "fake-odbc-1.0"
 
@@ -46,6 +50,7 @@ class FakeDriver:
         return self.connection
 
 
+# Establish one known profile so tests isolate only connector behavior.
 def _configure_generic_settings(monkeypatch):
     monkeypatch.setenv("DB_TYPE", "sqlserver")
     monkeypatch.setenv("DB_HOST", "localhost")
@@ -59,6 +64,7 @@ def _configure_generic_settings(monkeypatch):
     Config.load()
 
 
+# Context-managed operations must always close their ODBC connection.
 def test_connection_opens_and_closes(monkeypatch):
     _configure_generic_settings(monkeypatch)
     sql_connector = SQLServerConnector()
@@ -75,6 +81,7 @@ def test_connection_opens_and_closes(monkeypatch):
     assert driver.captured["timeout"] == 45
 
 
+# Remote hosts receive secure encryption defaults unless explicitly overridden.
 def test_remote_sqlserver_defaults_to_validated_encryption(monkeypatch):
     _configure_generic_settings(monkeypatch)
     monkeypatch.setenv("DB_HOST", "sql.company.internal")
@@ -87,6 +94,7 @@ def test_remote_sqlserver_defaults_to_validated_encryption(monkeypatch):
     assert "TrustServerCertificate=no" in connection_string
 
 
+# A successful check returns useful metadata through the common connector shape.
 def test_test_connection_returns_server_snapshot(monkeypatch):
     _configure_generic_settings(monkeypatch)
     fake_connection = FakeConnection()

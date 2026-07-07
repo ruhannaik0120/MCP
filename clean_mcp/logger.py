@@ -27,6 +27,8 @@ class _RequestContextFilter(logging.Filter):
     """Populate request-scoped context on every log record."""
 
     def filter(self, record: logging.LogRecord) -> bool:
+        """Attach correlation fields that callers did not explicitly provide."""
+
         # Libraries may emit logs without our custom fields; defaults keep every
         # record valid JSON while request-scoped calls receive correlation data.
         if not hasattr(record, "request_id"):
@@ -44,6 +46,8 @@ class _JsonFormatter(logging.Formatter):
     """Emit machine-readable logs with the fields useful for audit trails."""
 
     def format(self, record: logging.LogRecord) -> str:
+        """Serialize one standard LogRecord into the framework JSON schema."""
+
         # JSON logs can be searched, correlated, or ingested by a reporting
         # platform without parsing human-formatted text.
         payload = {
@@ -66,11 +70,14 @@ class _JsonFormatter(logging.Formatter):
         return json.dumps(payload, default=str)
 
 
+# A named, non-propagating logger prevents duplicate output through root handlers.
 logger = logging.getLogger("mcp_execution_framework")
 logger.setLevel(getattr(logging, Config.LOG_LEVEL, logging.INFO))
 logger.propagate = False
 
 if not logger.handlers:
+    # Handler registration is idempotent because modules can be imported more
+    # than once by test runners and MCP client startup discovery.
     formatter = _JsonFormatter()
 
     file_handler = logging.FileHandler(get_log_file_path(), encoding="utf-8")
@@ -86,16 +93,24 @@ if not logger.handlers:
 
 
 def set_request_id(request_id: str) -> contextvars.Token[str]:
+    """Bind a request ID to the current async/thread execution context."""
+
     return _request_id_var.set(request_id)
 
 
 def reset_request_id(token: contextvars.Token[str]) -> None:
+    """Restore the request context that existed before the current call."""
+
     _request_id_var.reset(token)
 
 
 def set_environment(environment: str) -> contextvars.Token[str]:
+    """Bind the active database/environment label to subsequent log records."""
+
     return _environment_var.set(environment)
 
 
 def reset_environment(token: contextvars.Token[str]) -> None:
+    """Restore the previous environment logging context."""
+
     _environment_var.reset(token)

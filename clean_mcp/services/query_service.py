@@ -18,6 +18,8 @@ class QueryService:
     """Service layer that orchestrates tool requests and formats responses."""
 
     def __init__(self, sql_connector=None):
+        """Create the service with a selected connector or an injected test double."""
+
         if sql_connector is None:
             Config.load()
             self.connector = ConnectorFactory.create()
@@ -25,6 +27,8 @@ class QueryService:
             self.connector = sql_connector
 
     def _request_id(self) -> str:
+        """Generate the short correlation ID shared by response, log, and artifact."""
+
         return uuid4().hex[:12]
 
     def _effective_timeout(self, timeout_seconds: int | None) -> int:
@@ -35,6 +39,8 @@ class QueryService:
         return min(timeout_seconds or Config.GLOBAL_TIMEOUT_SECONDS, Config.GLOBAL_TIMEOUT_SECONDS)
 
     def _begin_request(self, tool: str) -> tuple[str, object, object, float, str]:
+        """Initialize correlation context, timing, and the request-received log."""
+
         # Context variables attach the same request ID and active backend to
         # every log emitted while this tool call is being processed.
         request_id = self._request_id()
@@ -67,6 +73,8 @@ class QueryService:
         metadata: dict | None = None,
         error: StructuredError | None = None,
     ) -> ToolResponse:
+        """Build the common success/error response envelope with elapsed time."""
+
         # Timing and envelope construction are centralized so every MCP tool
         # returns the same contract regardless of the selected connector.
         execution_time_ms = int((perf_counter() - start_time) * 1000)
@@ -97,6 +105,8 @@ class QueryService:
         data: dict | None = None,
         metadata: dict | None = None,
     ) -> ToolResponse:
+        """Build a failed response using the framework's structured error model."""
+
         return self._response(
             tool=tool,
             environment=environment,
@@ -118,6 +128,8 @@ class QueryService:
         )
 
     def _end_request(self, tool: str, environment: str, request_id: str, response: ToolResponse) -> None:
+        """Write the final correlated success or failure log entry."""
+
         success = response.success
         log_message = f"{tool} {'succeeded' if success else 'failed'}."
         log_method = logger.info if success else logger.error
@@ -144,6 +156,8 @@ class QueryService:
         query: str | None,
         response: ToolResponse,
     ) -> None:
+        """Save a complete request outcome as durable JSON audit evidence."""
+
         artifact = {
             "request_id": request_id,
             "timestamp": response.timestamp,
@@ -199,6 +213,8 @@ class QueryService:
         schema: str | None = None,
         query: str | None = None,
     ) -> ToolResponse:
+        """Persist and log an outcome before returning it to the MCP wrapper."""
+
         # Finalization is shared by success and failure paths, guaranteeing that
         # rejected queries and connection errors are auditable too.
         self._save_execution_artifact(tool, request_id, environment, database, schema, query, response)
@@ -219,6 +235,8 @@ class QueryService:
         message: str,
         hint: str | None = None,
     ) -> ToolResponse:
+        """Translate connector/configuration exceptions into structured errors."""
+
         # Configuration mistakes are non-retryable; network/database errors may
         # be retried by an upstream orchestrator after user intervention.
         if isinstance(error, ConfigError):
@@ -243,6 +261,8 @@ class QueryService:
         database: str | None = None,
         timeout_seconds: int | None = None,
     ) -> ToolResponse:
+        """Test the selected connector and return a normalized server snapshot."""
+
         request_id, request_token, environment_token, start_time, requested_environment = self._begin_request("test_connection")
         try:
             snapshot = self.connector.test_connection(
@@ -304,6 +324,8 @@ class QueryService:
         environment: str | None = None,
         timeout_seconds: int | None = None,
     ) -> ToolResponse:
+        """Report liveness plus redacted effective environment configuration."""
+
         request_id, request_token, environment_token, start_time, requested_environment = self._begin_request("health")
         try:
             snapshot = self.connector.health_check(
@@ -369,6 +391,8 @@ class QueryService:
         environment: str | None = None,
         timeout_seconds: int | None = None,
     ) -> ToolResponse:
+        """List databases through the selected connector and common response schema."""
+
         request_id, request_token, environment_token, start_time, requested_environment = self._begin_request("list_databases")
         try:
             payload = self.connector.list_databases(timeout_seconds=self._effective_timeout(timeout_seconds))
@@ -423,6 +447,8 @@ class QueryService:
         environment: str | None = None,
         timeout_seconds: int | None = None,
     ) -> ToolResponse:
+        """List tables/views for a database and optional schema."""
+
         request_id, request_token, environment_token, start_time, requested_environment = self._begin_request("list_tables")
         try:
             target_database = database or Config.DATABASE
@@ -485,6 +511,8 @@ class QueryService:
         environment: str | None = None,
         timeout_seconds: int | None = None,
     ) -> ToolResponse:
+        """Return normalized column metadata or a structured not-found result."""
+
         request_id, request_token, environment_token, start_time, requested_environment = self._begin_request("describe_table")
         try:
             payload = self.connector.describe_table(
@@ -581,6 +609,8 @@ class QueryService:
         execution_mode: str = "",
         _tool_name: str = "execute_select_query",
     ) -> ToolResponse:
+        """Validate policy, execute one statement, and normalize its result."""
+
         request_id, request_token, environment_token, start_time, requested_environment = self._begin_request(_tool_name)
         statement = sql or query
         try:
@@ -699,6 +729,8 @@ class QueryService:
         return self.execute_select_query(_tool_name="execute_query", **kwargs)
 
     def config_diagnostics(self) -> ToolResponse:
+        """Return agent-safe configuration diagnostics through the standard envelope."""
+
         request_id, request_token, environment_token, start_time, requested_environment = self._begin_request("config_diagnostics")
         try:
             response = self._response(
@@ -749,6 +781,8 @@ _QUERY_SERVICE: QueryService | None = None
 
 
 def get_query_service() -> QueryService:
+    """Return the process-wide service used by stateless MCP tool wrappers."""
+
     global _QUERY_SERVICE
     # The service is reused during normal operation and explicitly discarded
     # by profile switching when a different connector is required.
@@ -758,6 +792,8 @@ def get_query_service() -> QueryService:
 
 
 def reset_query_service() -> None:
+    """Discard the cached connector service after a runtime profile change."""
+
     """Close and discard the cached service after a configuration change."""
 
     global _QUERY_SERVICE

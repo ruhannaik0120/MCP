@@ -6,6 +6,8 @@ from services.query_service import QueryService
 
 
 class FakeConnector:
+    """Record service delegation while returning deterministic connector data."""
+
     def __init__(self):
         self.calls = []
 
@@ -52,6 +54,8 @@ class FakeConnector:
 
 
 def _configure_settings(monkeypatch):
+    """Set stable policy values without loading credentials or live drivers."""
+
     monkeypatch.setenv("DB_TYPE", "sqlserver")
     monkeypatch.setenv("DB_HOST", "localhost")
     monkeypatch.setenv("DB_DATABASE", "sales")

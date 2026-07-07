@@ -28,12 +28,16 @@ _SENSITIVE_OPTION_KEYS = frozenset(
 
 
 def _normalize_text(value: str | None, default: str = "") -> str:
+    """Trim an optional string and substitute a default for blank values."""
+
     if value is None:
         return default
     return value.strip() or default
 
 
 def _as_int(value: str | None, default: int) -> int:
+    """Parse an integer environment value with a clear configuration error."""
+
     if value is None or not value.strip():
         return default
     try:
@@ -43,6 +47,8 @@ def _as_int(value: str | None, default: int) -> int:
 
 
 def _as_dict(value: str | None) -> dict[str, object]:
+    """Parse JSON connection options and require an object-shaped value."""
+
     if value is None or not value.strip():
         return {}
     try:
@@ -55,11 +61,15 @@ def _as_dict(value: str | None) -> dict[str, object]:
 
 
 def _normalize_execution_mode(value: str | None, default: str = "read_only") -> str:
+    """Normalize the configured execution policy for reliable comparisons."""
+
     normalized = (value or default).strip().lower()
     return normalized or default
 
 
 def _redact_connection_options(options: dict[str, object]) -> dict[str, object]:
+    """Copy connection options while replacing recognized secret values."""
+
     # Diagnostics may be shown to an AI client, so secret-like option values
     # are replaced before configuration leaves the process boundary.
     redacted: dict[str, object] = {}
@@ -90,6 +100,8 @@ class ConnectionConfig:
     execution_mode: str = "read_only"
 
     def safe_dict(self) -> dict[str, object]:
+        """Return this connection profile in a form safe for agent responses."""
+
         return {
             "db_type": self.db_type,
             "host": "[CONFIGURED]" if self.host else "",
@@ -122,6 +134,10 @@ class Config:
 
     @classmethod
     def load(cls) -> "Config":
+        """Refresh process-wide settings from environment variables."""
+
+        # All environment access is centralized here so connectors receive one
+        # consistent snapshot instead of interpreting raw strings themselves.
         cls.DB_TYPE = _normalize_text(os.getenv("DB_TYPE")).lower()
         cls.HOST = _normalize_text(os.getenv("DB_HOST"))
         cls.DATABASE = _normalize_text(os.getenv("DB_DATABASE"))
@@ -137,6 +153,8 @@ class Config:
 
     @classmethod
     def validate(cls) -> "Config":
+        """Load settings and reject all detected configuration problems."""
+
         cls.load()
 
         # Collect every problem and report them together. This makes setup much
@@ -174,6 +192,8 @@ class Config:
 
     @classmethod
     def _validate_connection_options(cls) -> list[str]:
+        """Validate generic options shared across connector implementations."""
+
         errors: list[str] = []
         port = cls.CONNECTION_OPTIONS.get("port")
         if port is not None:
@@ -185,6 +205,8 @@ class Config:
 
     @classmethod
     def _validate_connector_requirements(cls) -> list[str]:
+        """Apply only the required fields that vary by selected backend."""
+
         errors: list[str] = []
         if cls.DB_TYPE == "sqlserver" and not cls.DATABASE:
             errors.append("DB_DATABASE is required for the SQL Server connector.")
@@ -196,6 +218,8 @@ class Config:
 
     @classmethod
     def _ensure_artifact_directories(cls) -> None:
+        """Best-effort directory creation used during non-validating imports."""
+
         for path in (cls.OUTPUT_DIR, cls.EXECUTION_ARTIFACTS_DIR, cls.LOG_ARTIFACTS_DIR):
             try:
                 path.mkdir(parents=True, exist_ok=True)
@@ -204,6 +228,8 @@ class Config:
 
     @classmethod
     def connection_config(cls) -> ConnectionConfig:
+        """Build the neutral configuration object consumed by connectors."""
+
         if not cls.DB_TYPE:
             cls.load()
         # Connectors receive one neutral profile instead of reading environment
@@ -222,6 +248,8 @@ class Config:
 
     @classmethod
     def as_dict(cls) -> dict[str, object]:
+        """Return redacted effective settings for internal structured output."""
+
         if not cls.DB_TYPE:
             cls.load()
 
@@ -240,6 +268,8 @@ class Config:
 
     @classmethod
     def diagnostics(cls) -> dict[str, object]:
+        """Return troubleshooting metadata without returning credential values."""
+
         if not cls.DB_TYPE:
             cls.load()
 
@@ -263,6 +293,8 @@ class Config:
 
     @classmethod
     def _validate_output_directories(cls) -> list[str]:
+        """Verify runtime output paths can be created and used as directories."""
+
         errors: list[str] = []
         for path in (cls.OUTPUT_DIR, cls.EXECUTION_ARTIFACTS_DIR, cls.LOG_ARTIFACTS_DIR):
             try:
@@ -276,4 +308,5 @@ class Config:
         return errors
 
 
+# Load defaults at import time; startup validation still performs the strict gate.
 Config.load()
