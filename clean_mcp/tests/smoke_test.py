@@ -1,7 +1,7 @@
 """Minimal smoke test for MCP startup validation.
 
-This script exercises configuration loading, startup validation, artifact
-directory creation, and an optional lightweight connectivity check.
+This script exercises configuration loading, startup validation, connector
+creation, and an optional lightweight connectivity check.
 It is intended to catch environment and startup issues before starting the
 MCP server.
 """
@@ -18,21 +18,14 @@ from connectors.factory import ConnectorFactory
 
 
 def main() -> int:
-    """Validate startup, artifacts, and one optional connector round trip."""
+    """Validate startup and one optional connector round trip."""
 
     try:
         print("Loading configuration...")
         Config.load()
-        print("Validating configuration and artifact directories...")
+        print("Validating configuration...")
         Config.validate()
         print("Configuration validation passed.")
-
-        if Config.OUTPUT_DIR.exists():
-            print(f"Artifacts directory: {Config.OUTPUT_DIR}")
-            print(f"Execution artifacts: {Config.EXECUTION_ARTIFACTS_DIR}")
-            print(f"Log artifacts: {Config.LOG_ARTIFACTS_DIR}")
-        else:
-            print(f"WARNING: Artifacts directory does not exist: {Config.OUTPUT_DIR}")
 
         print("Configuration diagnostics:")
         print(Config.diagnostics())

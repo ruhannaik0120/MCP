@@ -16,8 +16,8 @@ if (-not (Test-Path $Python)) {
 
 Push-Location $ProjectRoot
 try {
-    # Keep test-created temporary files inside the ignored artifacts directory.
-    $TestTemp = Join-Path $ProjectRoot "artifacts\test-temp"
+    # Keep verification bytecode inside an ignored test-only directory.
+    $TestTemp = Join-Path $ProjectRoot ".test-runtime"
     New-Item -ItemType Directory -Path $TestTemp -Force | Out-Null
     # Redirect bytecode away from OneDrive-managed source caches, which can be
     # temporarily locked by editors or an already-running MCP process.
@@ -29,7 +29,6 @@ try {
     # The deterministic demo connector verifies startup without live credentials.
     $env:DB_TYPE = "demo"
     $env:DB_DATABASE = "qa_demo"
-    $env:DB_EXECUTION_MODE = "read_only"
     & $Python tests\smoke_test.py
     if ($LASTEXITCODE -ne 0) { throw "Smoke test failed." }
     Write-Host "All verification gates passed."

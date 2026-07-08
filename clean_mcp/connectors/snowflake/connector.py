@@ -53,10 +53,10 @@ class SnowflakeConnector(DatabaseConnector):
         kwargs.update(options)
         return kwargs
 
-    def _row_limit_sql(self, sql: str, max_rows: int, execution_mode: str | None) -> str:
-        """Apply the configured result cap to read-only Snowflake statements."""
+    def _row_limit_sql(self, sql: str, max_rows: int) -> str:
+        """Apply the configured result cap to row-returning Snowflake statements."""
         normalized_sql = sql.strip().rstrip(";")
-        if (execution_mode or "read_only").strip().lower() != "read_only":
+        if not re.match(r"(?is)^\s*SELECT\b", normalized_sql):
             return normalized_sql
         # Preserve either supported row-limiting form before appending LIMIT.
         limit_match = re.search(r"\bLIMIT\s+(\d+)\b", normalized_sql, flags=re.I)
@@ -193,18 +193,18 @@ class SnowflakeConnector(DatabaseConnector):
                 cursor.close()
         return {"connector_type": self.__class__.__name__, "db_type": profile.db_type, "database": target_database, "schema": target_schema, "table": table, "column_count": len(payload["rows"]), "columns": payload["rows"]}
 
-    def execute_query(self, query: str, *, database: str | None = None, timeout_seconds: int | None = None, max_rows: int | None = None, execution_mode: str | None = None) -> Any:
+    def execute_query(self, query: str, *, database: str | None = None, timeout_seconds: int | None = None, max_rows: int | None = None) -> Any:
         """Execute validated SQL and normalize read or committed write output."""
         profile = self._profile()
         target_database = self._normalize_database(database, profile.database)
-        limited_query = self._row_limit_sql(query, max_rows or profile.max_rows, execution_mode or profile.execution_mode)
+        limited_query = self._row_limit_sql(query, max_rows or profile.max_rows)
         with self._connection(database=target_database or None, timeout_seconds=timeout_seconds) as conn:
             cursor = conn.cursor()
             try:
                 cursor.execute(limited_query)
                 payload = self._fetch_rows(cursor, max_rows or profile.max_rows)
                 rows_affected = cursor.rowcount if cursor.description is None else len(payload["rows"])
-                if (execution_mode or profile.execution_mode).strip().lower() == "read_write":
+                if cursor.description is None:
                     # Commit explicitly so behavior remains consistent even if
                     # Snowflake autocommit settings are changed by a profile.
                     conn.commit()

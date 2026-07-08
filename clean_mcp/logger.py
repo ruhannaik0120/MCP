@@ -9,15 +9,10 @@ from __future__ import annotations
 import contextvars
 import json
 import logging
-from pathlib import Path
 
-from artifact_manager import get_log_file_path
 from config import Config
 
 Config.load()
-
-LOG_DIR = Config.LOG_ARTIFACTS_DIR
-LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 _request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
 _environment_var: contextvars.ContextVar[str] = contextvars.ContextVar("environment", default="-")
@@ -80,15 +75,12 @@ if not logger.handlers:
     # than once by test runners and MCP client startup discovery.
     formatter = _JsonFormatter()
 
-    file_handler = logging.FileHandler(get_log_file_path(), encoding="utf-8")
-    file_handler.setFormatter(formatter)
-    file_handler.addFilter(_RequestContextFilter())
-
+    # MCP uses stderr for technical diagnostics. The outer agent workflow owns
+    # persistent run logs and final execution-result files.
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     console_handler.addFilter(_RequestContextFilter())
 
-    logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
 

@@ -20,7 +20,6 @@ def _configure(monkeypatch, db_type: str, options: str = "{}") -> None:
     monkeypatch.setenv("DB_CONNECTION_OPTIONS", options)
     monkeypatch.setenv("DB_TIMEOUT_SECONDS", "12")
     monkeypatch.setenv("DB_MAX_ROWS", "100")
-    monkeypatch.setenv("DB_EXECUTION_MODE", "read_only")
     Config.load()
 
 
@@ -115,8 +114,6 @@ class _WriteConnection:
 # MySQL, PostgreSQL, and Snowflake must commit successful write statements.
 def test_transactional_connectors_commit_writes(monkeypatch, db_type, connector_class):
     _configure(monkeypatch, db_type)
-    monkeypatch.setenv("DB_EXECUTION_MODE", "read_write")
-    Config.load()
     connector = connector_class()
     connection = _WriteConnection()
 
@@ -128,7 +125,6 @@ def test_transactional_connectors_commit_writes(monkeypatch, db_type, connector_
 
     result = connector.execute_query(
         "UPDATE demo_items SET status = 'verified'",
-        execution_mode="read_write",
     )
 
     assert connection.committed is True

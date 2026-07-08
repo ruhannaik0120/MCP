@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 from datetime import datetime, timezone
+import os
 from time import perf_counter
 from uuid import uuid4
 
-from artifact_manager import save_execution_artifact
 from config import Config, ConfigError
 from connectors.factory import ConnectorFactory
 from logger import logger, reset_environment, reset_request_id, set_environment, set_request_id
@@ -27,7 +27,7 @@ class QueryService:
             self.connector = sql_connector
 
     def _request_id(self) -> str:
-        """Generate the short correlation ID shared by response, log, and artifact."""
+        """Generate the short correlation ID shared by responses and logs."""
 
         return uuid4().hex[:12]
 
@@ -78,6 +78,11 @@ class QueryService:
         # Timing and envelope construction are centralized so every MCP tool
         # returns the same contract regardless of the selected connector.
         execution_time_ms = int((perf_counter() - start_time) * 1000)
+        response_metadata = {
+            "profile": os.getenv("DB_ACTIVE_PROFILE", "default").strip() or "default",
+            "db_type": Config.DB_TYPE,
+            **(metadata or {}),
+        }
         return ToolResponse(
             success=success,
             tool=tool,
@@ -85,7 +90,7 @@ class QueryService:
             environment=environment,
             execution_time_ms=execution_time_ms,
             data=data or {},
-            metadata=metadata or {},
+            metadata=response_metadata,
             error=error,
         )
 
@@ -146,63 +151,6 @@ class QueryService:
             },
         )
 
-    def _save_execution_artifact(
-        self,
-        tool: str,
-        request_id: str,
-        environment: str,
-        database: str | None,
-        schema: str | None,
-        query: str | None,
-        response: ToolResponse,
-    ) -> None:
-        """Save a complete request outcome as durable JSON audit evidence."""
-
-        artifact = {
-            "request_id": request_id,
-            "timestamp": response.timestamp,
-            "tool": tool,
-            "environment": environment,
-            "database": database or "",
-            "schema": schema or "",
-            "query": query or "",
-            "execution_time_ms": response.execution_time_ms,
-            "status": "success" if response.success else "failed",
-            "rows_returned": len(response.data.get("rows", [])) if isinstance(response.data.get("rows", []), list) else 0,
-            "result": response.data,
-            "metadata": response.metadata,
-            "error": response.error.to_dict() if response.error is not None else None,
-        }
-
-        try:
-            save_execution_artifact(request_id, artifact)
-            logger.info(
-                "Execution artifact saved.",
-                extra={
-                    "tool": tool,
-                    "environment": environment,
-                    "db_type": Config.DB_TYPE,
-                    "request_id": request_id,
-                    "event": "execution_artifact_saved",
-                    "execution_time_ms": response.execution_time_ms,
-                    "status": artifact["status"],
-                },
-            )
-        except OSError as exc:
-            logger.error(
-                "Failed to save execution artifact.",
-                extra={
-                    "tool": tool,
-                    "environment": environment,
-                    "db_type": Config.DB_TYPE,
-                    "request_id": request_id,
-                    "event": "execution_artifact_failed",
-                    "execution_time_ms": response.execution_time_ms,
-                    "error_code": "ARTIFACT_SAVE_FAILED",
-                },
-            )
-            logger.debug(str(exc))
-
     def _finalize_request(
         self,
         response: ToolResponse,
@@ -213,11 +161,8 @@ class QueryService:
         schema: str | None = None,
         query: str | None = None,
     ) -> ToolResponse:
-        """Persist and log an outcome before returning it to the MCP wrapper."""
+        """Log an outcome before returning it to the MCP wrapper."""
 
-        # Finalization is shared by success and failure paths, guaranteeing that
-        # rejected queries and connection errors are auditable too.
-        self._save_execution_artifact(tool, request_id, environment, database, schema, query, response)
         self._end_request(tool, environment, request_id, response)
         return response
 
@@ -249,7 +194,7 @@ class QueryService:
             message=message,
             request_id=request_id,
             start_time=start_time,
-            detail=str(error),
+            detail=Config.redact_text(error),
             hint=hint,
             retryable=retryable,
             data=data,
@@ -597,7 +542,7 @@ class QueryService:
             reset_request_id(request_token)
             reset_environment(environment_token)
 
-    def execute_select_query(
+    def execute_query(
         self,
         sql: str = "",
         query: str = "",
@@ -606,28 +551,20 @@ class QueryService:
         environment: str | None = None,
         timeout_seconds: int | None = None,
         max_rows: int | None = None,
-        execution_mode: str = "",
-        _tool_name: str = "execute_select_query",
+        _tool_name: str = "execute_query",
     ) -> ToolResponse:
         """Validate policy, execute one statement, and normalize its result."""
 
         request_id, request_token, environment_token, start_time, requested_environment = self._begin_request(_tool_name)
         statement = sql or query
         try:
-            effective_execution_mode = (execution_mode or Config.GLOBAL_EXECUTION_MODE).strip().lower() or Config.GLOBAL_EXECUTION_MODE
-            if effective_execution_mode not in {"read_only", "read_write"}:
-                raise ConfigError("execution_mode must be read_only or read_write.")
-            if Config.GLOBAL_EXECUTION_MODE == "read_only" and effective_execution_mode == "read_write":
-                # A tool argument may reduce permissions but cannot grant more
-                # authority than the server administrator configured.
-                raise ConfigError("The request cannot elevate the server from read_only to read_write mode.")
             if max_rows is not None and max_rows <= 0:
                 raise ConfigError("max_rows must be greater than zero.")
             # Per-request limits may reduce, but never raise, the configured cap.
             row_limit = min(max_rows or Config.GLOBAL_MAX_ROWS, Config.GLOBAL_MAX_ROWS)
-            # Validation enforces read-only policy when configured and basic
-            # statement integrity when the server explicitly enables writes.
-            valid, reason = validate_query(statement, execution_mode=effective_execution_mode)
+            # The agent/user approval workflow owns command authorization. MCP
+            # still enforces one structurally unambiguous statement per call.
+            valid, reason = validate_query(statement)
             if not valid:
                 response = self._error(
                     tool=_tool_name,
@@ -639,6 +576,9 @@ class QueryService:
                     retryable=False,
                     data={
                         "current_environment": Config.DB_TYPE.upper(),
+                        "database": database or Config.DATABASE,
+                        "schema": schema or "",
+                        "query": statement,
                         "row_count": 0,
                         "rows": [],
                     },
@@ -661,7 +601,6 @@ class QueryService:
                 database=target_database,
                 timeout_seconds=self._effective_timeout(timeout_seconds),
                 max_rows=row_limit,
-                execution_mode=effective_execution_mode,
             )
             columns = payload.get("columns", [])
             rows = payload.get("rows", [])
@@ -675,7 +614,7 @@ class QueryService:
                     "current_environment": Config.DB_TYPE.upper(),
                     "database": target_database,
                     "schema": schema or "",
-                    "execution_mode": effective_execution_mode,
+                    "query": statement,
                     "row_limit": row_limit,
                     "row_count": len(rows),
                     "rows_affected": payload.get("rows_affected", len(rows)),
@@ -685,7 +624,6 @@ class QueryService:
                 metadata={
                     "db_type": Config.DB_TYPE,
                     "row_limit": row_limit,
-                    "execution_mode": effective_execution_mode,
                 },
             )
             return self._finalize_request(
@@ -704,6 +642,13 @@ class QueryService:
                 request_id=request_id,
                 start_time=start_time,
                 error=exc,
+                data={
+                    "database": database or Config.DATABASE,
+                    "schema": schema or "",
+                    "query": statement,
+                    "row_count": 0,
+                    "rows": [],
+                },
                 message="Query execution failed.",
             )
             return self._finalize_request(
@@ -719,14 +664,10 @@ class QueryService:
             reset_request_id(request_token)
             reset_environment(environment_token)
 
-    def execute_query(self, **kwargs) -> ToolResponse:
-        """Execute through the generic tool while preserving the legacy alias.
+    def execute_select_query(self, **kwargs) -> ToolResponse:
+        """Deprecated compatibility alias for the generic execution path."""
 
-        Both public tools share one implementation, but responses retain the
-        correct tool name for logs, artifacts, and management screenshots.
-        """
-
-        return self.execute_select_query(_tool_name="execute_query", **kwargs)
+        return self.execute_query(_tool_name="execute_select_query", **kwargs)
 
     def config_diagnostics(self) -> ToolResponse:
         """Return agent-safe configuration diagnostics through the standard envelope."""

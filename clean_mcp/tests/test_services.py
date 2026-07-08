@@ -45,8 +45,8 @@ class FakeConnector:
             "columns": [{"COLUMN_NAME": "name", "DATA_TYPE": "nvarchar"}],
         }
 
-    def execute_query(self, query, *, database=None, timeout_seconds=None, max_rows=None, execution_mode=None):
-        self.calls.append(("execute_query", query, database, timeout_seconds, max_rows, execution_mode))
+    def execute_query(self, query, *, database=None, timeout_seconds=None, max_rows=None):
+        self.calls.append(("execute_query", query, database, timeout_seconds, max_rows))
         return {"columns": ["name"], "rows": [("alpha",), ("beta",)]}
 
     def close(self):
@@ -64,7 +64,7 @@ def _configure_settings(monkeypatch):
     monkeypatch.setenv("DB_CONNECTION_OPTIONS", '{"driver": "ODBC Driver 18 for SQL Server"}')
     monkeypatch.setenv("DB_TIMEOUT_SECONDS", "20")
     monkeypatch.setenv("DB_MAX_ROWS", "25")
-    monkeypatch.setenv("DB_EXECUTION_MODE", "read_only")
+    monkeypatch.setenv("DB_ACTIVE_PROFILE", "sqlserver-sandbox")
     Config.load()
 
 
@@ -136,41 +136,29 @@ def test_response_preserves_reserved_fields(monkeypatch):
     assert response["custom"] == "value"
 
 
-def test_row_limit_validation_blocks_non_select_query(monkeypatch):
+def test_execute_query_executes_approved_write_statement(monkeypatch):
     _configure_settings(monkeypatch)
-    service = QueryService(FakeConnector())
+    connector = FakeConnector()
+    service = QueryService(connector)
 
-    response = service.execute_select_query(sql="DELETE FROM items", environment="ignored").to_dict()
+    response = service.execute_query(sql="DELETE FROM items", environment="ignored").to_dict()
 
-    assert response["success"] is False
-    assert response["error"]["code"] == ErrorCode.QUERY_BLOCKED
+    assert response["success"] is True
+    assert response["tool"] == "execute_query"
+    assert response["query"] == "DELETE FROM items"
+    assert connector.calls[0][1] == "DELETE FROM items"
 
 
-def test_read_write_server_executes_write_statement(monkeypatch):
+def test_deprecated_alias_uses_same_generic_execution_path(monkeypatch):
     _configure_settings(monkeypatch)
-    monkeypatch.setenv("DB_EXECUTION_MODE", "read_write")
-    Config.load()
     connector = FakeConnector()
     service = QueryService(connector)
 
     response = service.execute_select_query(sql="UPDATE items SET active = 1").to_dict()
 
     assert response["success"] is True
+    assert response["tool"] == "execute_select_query"
     assert connector.calls[0][0] == "execute_query"
-    assert connector.calls[0][-1] == "read_write"
-
-
-def test_read_only_server_rejects_request_level_write_elevation(monkeypatch):
-    _configure_settings(monkeypatch)
-    service = QueryService(FakeConnector())
-
-    response = service.execute_select_query(
-        sql="UPDATE items SET active = 1",
-        execution_mode="read_write",
-    ).to_dict()
-
-    assert response["success"] is False
-    assert response["error"]["code"] == ErrorCode.CONFIG_INVALID
 
 
 def test_request_row_limit_cannot_exceed_configured_cap(monkeypatch):
@@ -182,6 +170,7 @@ def test_request_row_limit_cannot_exceed_configured_cap(monkeypatch):
 
     assert response["success"] is True
     assert response["metadata"]["row_limit"] == 25
+    assert response["metadata"]["profile"] == "sqlserver-sandbox"
     assert connector.calls[0][4] == 25
 
 
@@ -203,3 +192,17 @@ def test_non_positive_timeout_is_rejected(monkeypatch):
 
     assert response["success"] is False
     assert response["error"]["code"] == ErrorCode.CONFIG_INVALID
+
+
+def test_connector_errors_redact_configured_password(monkeypatch):
+    _configure_settings(monkeypatch)
+
+    class FailingConnector(FakeConnector):
+        def execute_query(self, query, **kwargs):
+            raise RuntimeError("Authentication failed for password dev_pass")
+
+    response = QueryService(FailingConnector()).execute_query(sql="SELECT 1").to_dict()
+
+    assert response["success"] is False
+    assert "dev_pass" not in str(response)
+    assert "[REDACTED]" in response["error"]["detail"]

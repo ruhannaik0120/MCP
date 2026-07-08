@@ -58,7 +58,6 @@ class DatabaseConnector(ABC):
         database: str | None = None,
         timeout_seconds: int | None = None,
         max_rows: int | None = None,
-        execution_mode: str | None = None,
     ) -> Any:
         """Execute a database query and return the result payload."""
 

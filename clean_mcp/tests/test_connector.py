@@ -60,7 +60,6 @@ def _configure_generic_settings(monkeypatch):
     monkeypatch.setenv("DB_CONNECTION_OPTIONS", '{"driver": "ODBC Driver 18 for SQL Server"}')
     monkeypatch.setenv("DB_TIMEOUT_SECONDS", "45")
     monkeypatch.setenv("DB_MAX_ROWS", "50")
-    monkeypatch.setenv("DB_EXECUTION_MODE", "read_only")
     Config.load()
 
 

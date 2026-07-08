@@ -51,7 +51,7 @@ def tool_switch_connection_profile(name: str, confirm: bool = False) -> str:
         payload = switch_profile(name, confirm=confirm)
         return json.dumps({"success": True, "data": payload}, indent=2, default=str)
     except Exception as exc:
-        return json.dumps({"success": False, "error": {"code": "PROFILE_SWITCH_FAILED", "message": str(exc)}}, indent=2)
+        return json.dumps({"success": False, "error": {"code": "PROFILE_SWITCH_FAILED", "message": Config.redact_text(exc)}}, indent=2)
 
 
 @mcp.tool()
@@ -127,14 +127,12 @@ def tool_execute_query(
     environment: str = "",
     timeout_seconds: int | None = None,
     max_rows: int | None = None,
-    execution_mode: str = "",
 ) -> str:
-    """Execute one SQL statement using the configured permission mode."""
+    """Execute an approved SQL command/query using the active database profile."""
 
-    # The generic tool supports the server's configured permission mode. The
-    # legacy select-named tool below remains available for existing clients.
+    # The legacy select-named tool below remains available for existing clients.
     return json.dumps(
-        execute_query(sql, query, database, schema, environment, timeout_seconds, max_rows, execution_mode),
+        execute_query(sql, query, database, schema, environment, timeout_seconds, max_rows),
         indent=2,
         default=str,
     )
@@ -149,12 +147,11 @@ def tool_execute_select_query(
     environment: str = "",
     timeout_seconds: int | None = None,
     max_rows: int | None = None,
-    execution_mode: str = "",
 ) -> str:
-    """Execute a parameterized SQL statement against the selected database."""
+    """Deprecated compatibility alias for tool_execute_query. Executes an approved SQL command/query using the active database profile."""
 
     return json.dumps(
-        execute_select_query(sql, query, database, schema, environment, timeout_seconds, max_rows, execution_mode),
+        execute_select_query(sql, query, database, schema, environment, timeout_seconds, max_rows),
         indent=2,
         default=str,
     )

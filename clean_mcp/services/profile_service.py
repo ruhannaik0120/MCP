@@ -20,7 +20,6 @@ _PROFILE_ENV_KEYS = {
     "connection_options": "DB_CONNECTION_OPTIONS",
     "timeout_seconds": "DB_TIMEOUT_SECONDS",
     "max_rows": "DB_MAX_ROWS",
-    "execution_mode": "DB_EXECUTION_MODE",
 }
 # A re-entrant lock prevents two agent requests from replacing process-wide
 # connection settings at the same time.
@@ -117,12 +116,12 @@ def switch_connection_profile(name: str, *, confirm: bool = False, test_connecti
 
     new_values = _profile_environment(profiles[normalized_name])
     affected_keys = set(_PROFILE_ENV_KEYS.values()) | {"DB_ACTIVE_PROFILE"}
-    # Snapshot every affected value before mutation. This snapshot is the
-    # transaction boundary used to restore a known-good profile on failure.
-    previous = {key: os.environ.get(key) for key in affected_keys}
-    previous_profile = _active_profile
 
     with _switch_lock:
+        # Snapshot inside the lock so concurrent switch requests cannot capture
+        # stale state and later roll back a switch that already succeeded.
+        previous = {key: os.environ.get(key) for key in affected_keys}
+        previous_profile = _active_profile
         try:
             # Clear old fields first so omitted values cannot leak from the
             # previous backend into the newly selected connector.

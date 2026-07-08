@@ -75,13 +75,11 @@ class SQLServerConnector(DatabaseConnector):
         """Compose the complete ODBC connection string for one database."""
         return self._connection_options(profile) + f"DATABASE={database};"
 
-    def _row_limit_sql(self, sql: str, max_rows: int, execution_mode: str | None) -> str:
-        """Apply SQL Server TOP limits to eligible read-only statements."""
+    def _row_limit_sql(self, sql: str, max_rows: int) -> str:
+        """Apply SQL Server TOP limits to eligible row-returning statements."""
         normalized_sql = sql.strip()
         upper_sql = normalized_sql.upper()
 
-        if (execution_mode or "read_only").strip().lower() != "read_only":
-            return normalized_sql
         # SQL Server uses TOP/FETCH rather than LIMIT. Existing limits are kept,
         # while ordinary SELECT statements receive a safe TOP cap.
         top_match = re.search(r"\bTOP\s*\(?\s*(\d+)\s*\)?", normalized_sql, flags=re.I)
@@ -321,13 +319,12 @@ class SQLServerConnector(DatabaseConnector):
         database: str | None = None,
         timeout_seconds: int | None = None,
         max_rows: int | None = None,
-        execution_mode: str | None = None,
     ) -> Any:
         """Execute validated SQL and normalize read or autocommitted write output."""
 
         profile = self._profile()
         target_database = self._normalize_database(database, profile.database)
-        limited_query = self._row_limit_sql(query, max_rows or profile.max_rows, execution_mode or profile.execution_mode)
+        limited_query = self._row_limit_sql(query, max_rows or profile.max_rows)
         with self._connection(database=target_database, timeout_seconds=timeout_seconds) as conn:
             cursor = conn.cursor()
             cursor.execute(limited_query)

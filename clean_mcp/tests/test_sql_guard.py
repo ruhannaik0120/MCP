@@ -15,16 +15,16 @@ def test_validate_query_allows_select():
     assert reason == ""
 
 
-def test_validate_query_blocks_write_keyword_in_read_only_mode():
-    ok, reason = validate_query("DELETE FROM users", execution_mode="read_only")
-    assert ok is False
-    assert "only select" in reason.lower() or "forbidden" in reason.lower()
-
-
-def test_validator_accepts_write_statement_in_read_write_mode():
-    ok, reason = validate_query("UPDATE users SET is_active = 1", execution_mode="read_write")
+def test_validator_accepts_approved_write_statement():
+    ok, reason = validate_query("UPDATE users SET is_active = 1")
     assert ok is True
     assert reason == ""
+
+
+def test_validate_query_rejects_multiple_statements():
+    ok, reason = validate_query("UPDATE users SET is_active = 1; DELETE FROM users")
+    assert ok is False
+    assert "multiple statements" in reason.lower()
 
 
 def test_validate_query_allows_cte():

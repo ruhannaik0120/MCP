@@ -154,7 +154,6 @@ class DemoConnector(DatabaseConnector):
         database: str | None = None,
         timeout_seconds: int | None = None,
         max_rows: int | None = None,
-        execution_mode: str | None = None,
     ) -> Any:
         """Return predictable rows for a small set of demonstration queries."""
 

@@ -75,6 +75,10 @@ class FakeService:
         self.calls.append(("execute_select_query", args, kwargs))
         return FakeResponse({"success": True, "tool": "execute_select_query", "environment": kwargs.get("environment", "DEV"), "request_id": "abc", "timestamp": "2026-06-28T00:00:00Z", "execution_time_ms": 2, "rows": []})
 
+    def execute_query(self, *args, **kwargs):
+        self.calls.append(("execute_query", args, kwargs))
+        return FakeResponse({"success": True, "tool": "execute_query", "environment": kwargs.get("environment", "DEV"), "request_id": "abc", "timestamp": "2026-06-28T00:00:00Z", "execution_time_ms": 2, "rows": []})
+
 
 def test_tool_wrappers_return_structured_payload(monkeypatch):
     fake_service = FakeService()
@@ -87,7 +91,8 @@ def test_tool_wrappers_return_structured_payload(monkeypatch):
     databases_payload = metadata_tools.list_databases(environment="DEV")
     tables_payload = metadata_tools.list_tables(database="sales", schema="dbo", environment="DEV")
     describe_payload = metadata_tools.describe_table(database="sales", table="orders", schema="dbo", environment="DEV")
-    query_payload = query_tools.execute_select_query(sql="SELECT 1", database="sales", environment="DEV", execution_mode="read_only")
+    query_payload = query_tools.execute_query(sql="UPDATE items SET active = 1", database="sales", environment="DEV")
+    alias_payload = query_tools.execute_select_query(sql="SELECT 1", database="sales", environment="DEV")
 
     assert test_payload["tool"] == "test_connection"
     assert health_payload["status"] == "healthy"
@@ -95,3 +100,26 @@ def test_tool_wrappers_return_structured_payload(monkeypatch):
     assert tables_payload["tool"] == "list_tables"
     assert describe_payload["tool"] == "describe_table"
     assert query_payload["execution_time_ms"] == 2
+    assert alias_payload["tool"] == "execute_select_query"
+
+
+def test_query_tools_do_not_expose_execution_mode():
+    import inspect
+
+    assert "execution_mode" not in inspect.signature(query_tools.execute_query).parameters
+    assert "execution_mode" not in inspect.signature(query_tools.execute_select_query).parameters
+
+
+def test_server_query_tools_do_not_expose_execution_mode():
+    import ast
+    from pathlib import Path
+
+    server_tree = ast.parse((Path(__file__).parents[1] / "server.py").read_text(encoding="utf-8"))
+    functions = {
+        node.name: [argument.arg for argument in node.args.args]
+        for node in server_tree.body
+        if isinstance(node, ast.FunctionDef)
+    }
+
+    assert "execution_mode" not in functions["tool_execute_query"]
+    assert "execution_mode" not in functions["tool_execute_select_query"]

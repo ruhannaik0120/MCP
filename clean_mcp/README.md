@@ -1,148 +1,109 @@
-# MCP Execution Framework Foundation
+# MCP Database Execution Framework
 
-Production-oriented connector foundation for the controlled execution layer of an AI-driven QA automation system.
+Reusable, AI-client-agnostic MCP server for executing approved SQL commands through named database profiles. It supports SQL Server, PostgreSQL, MySQL, Snowflake, and an offline demo connector through one stable tool and response contract.
 
-An AI orchestrator can retrieve requirements, draft validation instructions, and request approval. This framework owns the next boundary: selecting an approved enterprise connection, validating an approved statement, executing it through MCP under the configured permission mode, and returning structured, auditable evidence. The AI never receives database credentials and never connects directly to a data platform.
+## Responsibility Boundary
 
-## System Position
+`clean_mcp` is only the database execution framework. It does not read Jira, interpret tickets, generate QA plans, manage approval logs, or write final PoC result files.
 
 ```text
-Jira / Requirements -> AI-Agnostic Orchestrator -> Human Approval
-                                                   |
-                                                   v
-                                      MCP Execution Framework
-                                      | tools and policy
-                                      | service orchestration
-                                      | connector factory
-                                      v
-                         SQL Server | PostgreSQL | MySQL | Snowflake
-                                                   |
-                                                   v
-                                 JSON results, logs, artifacts
+Jira / requirements
+        |
+        v
+AI agent: context, QA plan, SQL generation, approvals, run files
+        |
+        v
+clean_mcp: profile selection, request validation, execution, response
+        |
+        v
+SQL Server | PostgreSQL | MySQL | Snowflake | future connectors
 ```
 
-This repository is the reusable MCP execution-layer foundation intended to integrate into the larger system. Jira retrieval, AI reasoning, memory, and reporting remain separate components with explicit contracts.
-
-## Architecture Overview
-
-[![AI-Driven QA Automation Framework architecture](docs/assets/qa-automation-architecture.png)](docs/assets/qa-automation-architecture.png)
-
-The highlighted inner boundary shows the current workflow and implemented MCP
-foundation. Components outside that boundary represent target production
-expansion, including future enterprise connectors and reporting integrations.
+The outer agent workflow owns `ticket_context.md`, `qa_plan.md`, `generated_queries.sql`, `approval_log.md`, `run_log.md`, and `execution_result.json` under `poc_runs/<ticket_id>/`.
 
 ## Capabilities
 
-- AI-client agnostic MCP server using standard `stdio` transport.
-- SQL Server, PostgreSQL, MySQL, Snowflake, and deterministic offline demo connectors.
-- Named profile switching at runtime without restarting the MCP server.
-- Mandatory `confirm=true` approval signal before a system transition.
-- Atomic switch validation, connectivity test, and rollback on failure.
-- Credentials remain in local environment configuration and are redacted from diagnostics.
-- Configurable read-only or read-write execution, single-statement enforcement, bounded row limits, and timeouts.
-- Stable JSON response envelopes, structured errors, request IDs, JSON logs, and per-request artifacts.
-- Architecture tests preventing database-driver imports outside `connectors/`.
+- Standard MCP `stdio` transport for compatible AI clients.
+- Connector factory and stable `DatabaseConnector` extension contract.
+- Approval-gated named profile switching with connection verification and rollback.
+- Approved SQL command execution, including reads, writes, and DDL permitted by the database account.
+- One-statement request validation, bounded returned rows, and timeouts.
+- Structured responses, errors, request IDs, duration, profile metadata, and result data.
+- Credential redaction in diagnostics and errors.
+- Technical console logging only; no MCP-owned execution-result artifacts.
+- Architecture tests that keep vendor drivers inside `connectors/`.
 
 ## MCP Tools
 
 | Tool | Purpose |
 |---|---|
-| `tool_list_connection_profiles` | Lists safe profile metadata without credentials. |
-| `tool_switch_connection_profile` | Switches after explicit approval, tests the target, and rolls back on failure. |
-| `tool_config_diagnostics` | Returns redacted runtime diagnostics. |
-| `tool_health` | Checks the active connector. |
-| `tool_test_connection` | Verifies connectivity and server metadata. |
+| `tool_list_connection_profiles` | Lists profile names and safe metadata without credentials. |
+| `tool_switch_connection_profile` | Requires `confirm=true`, verifies the target, and rolls back on failure. |
+| `tool_config_diagnostics` | Returns redacted effective configuration. |
+| `tool_test_connection` | Performs a real connection test and returns safe server metadata. |
+| `tool_health` | Checks the active connector's operational status. |
 | `tool_list_databases` | Lists visible databases. |
-| `tool_list_tables` | Lists tables by database/schema. |
-| `tool_describe_table` | Returns column metadata. |
-| `tool_execute_query` | Executes one statement using the configured permission mode. |
-| `tool_execute_select_query` | Compatibility alias for existing MCP clients. |
+| `tool_list_tables` | Lists tables/views by database and schema. |
+| `tool_describe_table` | Returns normalized column metadata. |
+| `tool_execute_query` | Primary tool for one approved SQL command/query. |
+| `tool_execute_select_query` | Deprecated compatibility alias for `tool_execute_query`. |
 
-## Runtime Switching
+The deprecated alias uses the same generic execution path and does not impose different SQL behavior.
 
-Define named profiles in `.env` through `DB_PROFILES_JSON`. Real passwords must exist only in `.env`, which is ignored by Git.
+## Configuration
+
+Copy the example and keep real credentials only in the ignored `.env` file:
+
+```powershell
+Copy-Item .\clean_mcp\.env.example .\clean_mcp\.env
+```
+
+Profiles are configured through `DB_PROFILES_JSON`. The AI works only with names such as `postgres-local`; profile listing returns credential-presence flags, never credential values.
 
 ```env
 DB_TYPE=demo
 DB_DATABASE=qa_demo
+DB_TIMEOUT_SECONDS=30
+DB_MAX_ROWS=500
 DB_ACTIVE_PROFILE=demo-local
-DB_PROFILES_JSON={"demo-local":{"db_type":"demo","database":"qa_demo","execution_mode":"read_write"},"postgres-local":{"db_type":"postgresql","host":"localhost","database":"qa_demo","username":"qa_user","password":"secret","execution_mode":"read_write","connection_options":{"port":5432}}}
+DB_PROFILES_JSON={"demo-local":{"db_type":"demo","database":"qa_demo"},"postgres-local":{"db_type":"postgresql","host":"localhost","database":"qa_demo","username":"qa_user","password":"qa_password","connection_options":{"port":5432}}}
 ```
 
-Expected agent flow:
+## Setup And Verification
 
-1. Call `tool_list_connection_profiles`.
-2. Explain the requested source and ask the user for approval.
-3. After approval, call `tool_switch_connection_profile(name="postgres-local", confirm=true)`.
-4. The framework validates configuration, builds the connector, and tests connectivity.
-5. On failure, the previous profile is restored automatically.
-
-The connectivity check cannot be disabled through the MCP tool. A profile is
-only made active after its configuration validates and its target responds.
-
-## Setup
-
-From the workspace root:
+From the repository root:
 
 ```powershell
 PowerShell -ExecutionPolicy Bypass -File .\clean_mcp\scripts\setup.ps1
-Copy-Item .\clean_mcp\.env.example .\clean_mcp\.env
-```
-
-Edit `.env`, then verify:
-
-```powershell
 PowerShell -ExecutionPolicy Bypass -File .\clean_mcp\scripts\verify.ps1
 ```
 
-VS Code discovers the server through `.vscode/mcp.json`. Reload VS Code after setup, open an MCP-capable agent, and enable `mcp-execution-framework`.
+VS Code discovers the server through `.vscode/mcp.json`. Restart the MCP server after changing `.env`.
 
-## Safety Contract
+## Safety Model
 
-- `DB_EXECUTION_MODE` selects `read_only` or `read_write`; tool arguments cannot elevate beyond the configured mode.
-- In `read_write` mode, INSERT, UPDATE, DELETE, DDL, and administrative statements are passed to the selected database connector.
-- Request row limits can reduce but never exceed the configured `DB_MAX_ROWS` ceiling (maximum 10,000).
-- Request timeouts can reduce but never exceed the configured `DB_TIMEOUT_SECONDS` ceiling.
-- The framework requires human approval before profile transitions.
-- Profiles and diagnostics expose presence flags, never passwords or tokens.
-- The MCP core accesses databases only through `ConnectorFactory -> DatabaseConnector`.
-- External database permissions remain the final enforcement layer; grant only the write permissions required by the workflow.
-- Every request produces a traceable ID, structured log, and execution artifact.
+- The agent must obtain human approval before execution and profile changes.
+- The profile-switch tool requires the explicit `confirm=true` assertion.
+- Use only sandbox/test databases and least-privilege profile credentials.
+- Keep cloud/private databases reachable only through approved company network access.
+- Database permissions remain the final authority for allowed commands.
+- Returned rows cannot exceed `DB_MAX_ROWS`; request timeouts cannot exceed `DB_TIMEOUT_SECONDS`.
+- Credentials, tokens, private keys, and connection strings are redacted from agent-visible diagnostics and errors.
+- One tool call accepts one SQL statement; comments and multiple statements are rejected to keep requests unambiguous.
 
 ## Repository Map
 
 ```text
-server.py                 MCP registration and stdio entry point
-config.py                 Generic validated configuration
-connectors/               Stable interface, factory, backend implementations
-services/                 Orchestration and atomic profile switching
-tools/                    Thin agent-facing wrappers
-validation/               Execution-mode and statement validation
-models/                   Stable response and error contracts
-artifacts/                Generated logs and execution evidence
-tests/                    Unit, policy, and architecture tests
-docs/                     Extension, testing, and demo documentation
-scripts/                  Reproducible setup and verification
+server.py         MCP registration and stdio entry point
+config.py         Validated, redacted runtime configuration
+connectors/       Common contract, factory, and vendor implementations
+services/         Request orchestration and profile switching
+tools/            Thin MCP-facing wrappers
+validation/       Single-command structural validation
+models/           Stable response and error contracts
+tests/            Unit, behavior, and architecture tests
+docs/             Integration, extension, and testing guides
+scripts/          Setup and verification automation
 ```
 
-To add SAP, Oracle, Databricks, or another system, follow [docs/ADDING_CONNECTORS.md](docs/ADDING_CONNECTORS.md). The tool, service, response, audit, and policy layers remain unchanged.
-
-## Verified Versus Configured
-
-The release gate currently passes **55 automated tests**. It also verifies all
-**ten MCP tools**, the real `stdio` protocol handshake, profile approval,
-successful switching, failed-switch rollback, permission-mode enforcement, dependency
-integrity, and backend-specific configuration mapping.
-
-| Connector | Implemented | Automated-tested | Live-verified |
-|---|---:|---:|---:|
-| Offline demo | Yes | Yes | Yes (`stdio` MCP client) |
-| SQL Server | Yes | Yes | Pending local SQL Server networking/authentication |
-| PostgreSQL | Yes | Yes | Pending profile credentials and query execution |
-| MySQL | Yes | Yes | Pending local server/profile configuration |
-| Snowflake | Yes | Yes | Pending account profile and query execution |
-
-A database connector is only called live-verified after `tool_test_connection`
-and a safe query succeed against that platform. Record results using
-[docs/LOCAL_TESTING.md](docs/LOCAL_TESTING.md); never imply external
-connectivity that was not actually tested.
+See [ADDING_CONNECTORS.md](docs/ADDING_CONNECTORS.md) for the connector extension contract and required verification rules.

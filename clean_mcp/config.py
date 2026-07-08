@@ -6,7 +6,6 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from pathlib import Path
 from typing import ClassVar
 
 from dotenv import load_dotenv
@@ -23,6 +22,8 @@ _SENSITIVE_OPTION_KEYS = frozenset(
         "private_key",
         "private_key_passphrase",
         "access_token",
+        "connection_string",
+        "connectionstring",
     }
 )
 
@@ -54,17 +55,10 @@ def _as_dict(value: str | None) -> dict[str, object]:
     try:
         parsed = json.loads(value)
     except json.JSONDecodeError as exc:
-        raise ConfigError(f"DB_CONNECTION_OPTIONS must be valid JSON: {value!r}") from exc
+        raise ConfigError("DB_CONNECTION_OPTIONS must be valid JSON.") from exc
     if not isinstance(parsed, dict):
         raise ConfigError("DB_CONNECTION_OPTIONS must decode to a JSON object.")
     return parsed
-
-
-def _normalize_execution_mode(value: str | None, default: str = "read_only") -> str:
-    """Normalize the configured execution policy for reliable comparisons."""
-
-    normalized = (value or default).strip().lower()
-    return normalized or default
 
 
 def _redact_connection_options(options: dict[str, object]) -> dict[str, object]:
@@ -74,7 +68,8 @@ def _redact_connection_options(options: dict[str, object]) -> dict[str, object]:
     # are replaced before configuration leaves the process boundary.
     redacted: dict[str, object] = {}
     for key, value in options.items():
-        if key.lower() in _SENSITIVE_OPTION_KEYS:
+        normalized_key = key.lower().replace("-", "_").replace(" ", "_")
+        if normalized_key in _SENSITIVE_OPTION_KEYS:
             redacted[key] = "[REDACTED]"
         else:
             redacted[key] = value
@@ -97,7 +92,6 @@ class ConnectionConfig:
     connection_options: dict[str, object] | None = None
     timeout_seconds: int = 30
     max_rows: int = 500
-    execution_mode: str = "read_only"
 
     def safe_dict(self) -> dict[str, object]:
         """Return this connection profile in a form safe for agent responses."""
@@ -111,7 +105,6 @@ class ConnectionConfig:
             "connection_options": _redact_connection_options(self.connection_options or {}),
             "timeout_seconds": self.timeout_seconds,
             "max_rows": self.max_rows,
-            "execution_mode": self.execution_mode,
         }
 
 
@@ -126,11 +119,7 @@ class Config:
     CONNECTION_OPTIONS: ClassVar[dict[str, object]] = {}
     GLOBAL_MAX_ROWS: ClassVar[int] = 500
     GLOBAL_TIMEOUT_SECONDS: ClassVar[int] = 30
-    GLOBAL_EXECUTION_MODE: ClassVar[str] = "read_only"
     LOG_LEVEL: ClassVar[str] = "INFO"
-    OUTPUT_DIR: ClassVar[Path] = Path(__file__).parent / "artifacts"
-    EXECUTION_ARTIFACTS_DIR: ClassVar[Path] = OUTPUT_DIR / "executions"
-    LOG_ARTIFACTS_DIR: ClassVar[Path] = OUTPUT_DIR / "logs"
 
     @classmethod
     def load(cls) -> "Config":
@@ -146,9 +135,7 @@ class Config:
         cls.CONNECTION_OPTIONS = _as_dict(os.getenv("DB_CONNECTION_OPTIONS"))
         cls.GLOBAL_MAX_ROWS = _as_int(os.getenv("DB_MAX_ROWS"), 500)
         cls.GLOBAL_TIMEOUT_SECONDS = _as_int(os.getenv("DB_TIMEOUT_SECONDS"), 30)
-        cls.GLOBAL_EXECUTION_MODE = _normalize_execution_mode(os.getenv("DB_EXECUTION_MODE"), "read_only")
         cls.LOG_LEVEL = _normalize_text(os.getenv("LOG_LEVEL"), "INFO").upper()
-        cls._ensure_artifact_directories()
         return cls
 
     @classmethod
@@ -171,8 +158,6 @@ class Config:
 
         if cls.LOG_LEVEL not in logging._nameToLevel:
             errors.append("LOG_LEVEL must be a valid logging level.")
-        if cls.GLOBAL_EXECUTION_MODE not in {"read_only", "read_write"}:
-            errors.append("DB_EXECUTION_MODE must be read_only or read_write.")
         if cls.GLOBAL_MAX_ROWS <= 0:
             errors.append("DB_MAX_ROWS must be greater than zero.")
         elif cls.GLOBAL_MAX_ROWS > 10_000:
@@ -182,12 +167,10 @@ class Config:
 
         errors.extend(cls._validate_connection_options())
         errors.extend(cls._validate_connector_requirements())
-        errors.extend(cls._validate_output_directories())
 
         if errors:
             raise ConfigError("Configuration validation failed: " + " ".join(errors))
 
-        cls._ensure_artifact_directories()
         return cls
 
     @classmethod
@@ -217,16 +200,6 @@ class Config:
         return errors
 
     @classmethod
-    def _ensure_artifact_directories(cls) -> None:
-        """Best-effort directory creation used during non-validating imports."""
-
-        for path in (cls.OUTPUT_DIR, cls.EXECUTION_ARTIFACTS_DIR, cls.LOG_ARTIFACTS_DIR):
-            try:
-                path.mkdir(parents=True, exist_ok=True)
-            except OSError:
-                pass
-
-    @classmethod
     def connection_config(cls) -> ConnectionConfig:
         """Build the neutral configuration object consumed by connectors."""
 
@@ -243,7 +216,6 @@ class Config:
             connection_options=dict(cls.CONNECTION_OPTIONS),
             timeout_seconds=cls.GLOBAL_TIMEOUT_SECONDS,
             max_rows=cls.GLOBAL_MAX_ROWS,
-            execution_mode=cls.GLOBAL_EXECUTION_MODE,
         )
 
     @classmethod
@@ -262,7 +234,6 @@ class Config:
             "connection_options": _redact_connection_options(dict(cls.CONNECTION_OPTIONS)),
             "global_max_rows": cls.GLOBAL_MAX_ROWS,
             "global_timeout_seconds": cls.GLOBAL_TIMEOUT_SECONDS,
-            "global_execution_mode": cls.GLOBAL_EXECUTION_MODE,
             "log_level": cls.LOG_LEVEL,
         }
 
@@ -281,31 +252,24 @@ class Config:
             "password_present": bool(cls.PASSWORD),
             "timeout_seconds": cls.GLOBAL_TIMEOUT_SECONDS,
             "max_rows": cls.GLOBAL_MAX_ROWS,
-            "execution_mode": cls.GLOBAL_EXECUTION_MODE,
             "connection_options": _redact_connection_options(dict(cls.CONNECTION_OPTIONS)),
             "supported_connectors": sorted(SUPPORTED_CONNECTORS),
-            "artifact_directories": {
-                "output_dir": str(cls.OUTPUT_DIR),
-                "execution_artifacts_dir": str(cls.EXECUTION_ARTIFACTS_DIR),
-                "log_artifacts_dir": str(cls.LOG_ARTIFACTS_DIR),
-            },
         }
 
     @classmethod
-    def _validate_output_directories(cls) -> list[str]:
-        """Verify runtime output paths can be created and used as directories."""
+    def redact_text(cls, value: object) -> str:
+        """Remove configured credential values from an external error message."""
 
-        errors: list[str] = []
-        for path in (cls.OUTPUT_DIR, cls.EXECUTION_ARTIFACTS_DIR, cls.LOG_ARTIFACTS_DIR):
-            try:
-                path.mkdir(parents=True, exist_ok=True)
-                if not path.is_dir():
-                    errors.append(f"Required directory {path} is not a directory.")
-            except PermissionError:
-                errors.append(f"Required directory {path} cannot be created due to permission denied.")
-            except OSError as exc:
-                errors.append(f"Required directory {path} cannot be created: {exc}")
-        return errors
+        text = str(value)
+        secrets = [cls.PASSWORD]
+        for key, option_value in cls.CONNECTION_OPTIONS.items():
+            normalized_key = key.lower().replace("-", "_").replace(" ", "_")
+            if normalized_key in _SENSITIVE_OPTION_KEYS:
+                secrets.append(str(option_value))
+        for secret in secrets:
+            if secret:
+                text = text.replace(secret, "[REDACTED]")
+        return text
 
 
 # Load defaults at import time; startup validation still performs the strict gate.

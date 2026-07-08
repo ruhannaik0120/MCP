@@ -16,7 +16,6 @@ def _configure_generic_settings(monkeypatch):
     monkeypatch.setenv("DB_CONNECTION_OPTIONS", '{"driver": "ODBC Driver 18 for SQL Server"}')
     monkeypatch.setenv("DB_TIMEOUT_SECONDS", "20")
     monkeypatch.setenv("DB_MAX_ROWS", "100")
-    monkeypatch.setenv("DB_EXECUTION_MODE", "read_only")
 
 
 def test_config_validation_passes_with_generic_settings(monkeypatch):
@@ -33,16 +32,12 @@ def test_config_validation_passes_with_generic_settings(monkeypatch):
     assert profile.connection_options == {"driver": "ODBC Driver 18 for SQL Server"}
 
 
-def test_config_validation_rejects_invalid_settings(monkeypatch):
-    monkeypatch.setenv("DB_TYPE", "sqlserver")
-    monkeypatch.setenv("DB_HOST", "localhost")
-    monkeypatch.setenv("DB_DATABASE", "master")
-    monkeypatch.setenv("DB_EXECUTION_MODE", "invalid")
+def test_connection_config_has_no_execution_mode(monkeypatch):
+    _configure_generic_settings(monkeypatch)
 
     Config.load()
 
-    with pytest.raises(ConfigError):
-        Config.validate()
+    assert not hasattr(Config.connection_config(), "execution_mode")
 
 
 def test_config_rejects_non_numeric_max_rows(monkeypatch):
@@ -95,3 +90,19 @@ def test_config_diagnostics_redacts_password(monkeypatch):
     assert "secret-value" not in str(diagnostics)
     assert diagnostics["connection_options"]["password"] == "[REDACTED]"
     assert "host" not in diagnostics
+
+
+def test_diagnostics_redact_connection_strings_and_private_keys(monkeypatch):
+    monkeypatch.setenv("DB_TYPE", "postgresql")
+    monkeypatch.setenv("DB_HOST", "localhost")
+    monkeypatch.setenv(
+        "DB_CONNECTION_OPTIONS",
+        '{"connection_string":"Server=private","private_key":"key-material"}',
+    )
+
+    Config.load()
+    diagnostics = Config.diagnostics()
+
+    assert diagnostics["connection_options"]["connection_string"] == "[REDACTED]"
+    assert diagnostics["connection_options"]["private_key"] == "[REDACTED]"
+    assert "key-material" not in str(diagnostics)

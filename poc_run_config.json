@@ -1,0 +1,22 @@
+{
+  "ticket_id": "REPLACE_WITH_JIRA_TICKET_ID",
+  "run_folder": "poc_runs/<ticket_id>",
+  "expected_database_profiles": [
+    "postgres-local",
+    "mysql-local",
+    "snowflake-sandbox"
+  ],
+  "output_files": {
+    "ticket_context": "ticket_context.md",
+    "qa_plan": "qa_plan.md",
+    "generated_queries": "generated_queries.sql",
+    "execution_result": "execution_result.json",
+    "approval_log": "approval_log.md",
+    "run_log": "run_log.md"
+  },
+  "approval_checkpoints": [
+    "before_sql_generation",
+    "before_profile_switch",
+    "before_sql_execution"
+  ]
+}
