@@ -2,24 +2,21 @@
 
 Reusable, AI-client-agnostic MCP server for executing approved SQL commands through named database profiles. It supports SQL Server, PostgreSQL, MySQL, Snowflake, and an offline demo connector through one stable tool and response contract.
 
-## Responsibility Boundary
+## Framework Scope
 
-`clean_mcp` is only the database execution framework. It does not read Jira, interpret tickets, generate QA plans, manage approval logs, or write final PoC result files.
+`clean_mcp` is a standalone MCP database execution framework. It exposes one
+stable tool surface for selecting configured database profiles, inspecting
+metadata, executing approved SQL commands, and returning structured results.
 
 ```text
-Jira / requirements
+MCP-compatible client
         |
         v
-AI agent: context, QA plan, SQL generation, approvals, run files
-        |
-        v
-clean_mcp: profile selection, request validation, execution, response
+clean_mcp: profile selection, validation, execution, structured response
         |
         v
 SQL Server | PostgreSQL | MySQL | Snowflake | future connectors
 ```
-
-The outer agent workflow owns `ticket_context.md`, `qa_plan.md`, `generated_queries.sql`, `approval_log.md`, `run_log.md`, and `execution_result.json` under `poc_runs/<ticket_id>/`.
 
 ## Capabilities
 
@@ -30,7 +27,7 @@ The outer agent workflow owns `ticket_context.md`, `qa_plan.md`, `generated_quer
 - One-statement request validation, bounded returned rows, and timeouts.
 - Structured responses, errors, request IDs, duration, profile metadata, and result data.
 - Credential redaction in diagnostics and errors.
-- Technical console logging only; no MCP-owned execution-result artifacts.
+- Structured technical console logging with request correlation.
 - Architecture tests that keep vendor drivers inside `connectors/`.
 
 ## MCP Tools
@@ -82,7 +79,7 @@ VS Code discovers the server through `.vscode/mcp.json`. Restart the MCP server 
 
 ## Safety Model
 
-- The agent must obtain human approval before execution and profile changes.
+- The calling client must obtain human approval before execution and profile changes.
 - The profile-switch tool requires the explicit `confirm=true` assertion.
 - Use only sandbox/test databases and least-privilege profile credentials.
 - Keep cloud/private databases reachable only through approved company network access.

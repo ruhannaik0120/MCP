@@ -562,8 +562,8 @@ class QueryService:
                 raise ConfigError("max_rows must be greater than zero.")
             # Per-request limits may reduce, but never raise, the configured cap.
             row_limit = min(max_rows or Config.GLOBAL_MAX_ROWS, Config.GLOBAL_MAX_ROWS)
-            # The agent/user approval workflow owns command authorization. MCP
-            # still enforces one structurally unambiguous statement per call.
+            # The calling client owns command authorization. MCP still enforces
+            # one structurally unambiguous statement per call.
             valid, reason = validate_query(statement)
             if not valid:
                 response = self._error(

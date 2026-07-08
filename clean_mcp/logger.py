@@ -75,8 +75,8 @@ if not logger.handlers:
     # than once by test runners and MCP client startup discovery.
     formatter = _JsonFormatter()
 
-    # MCP uses stderr for technical diagnostics. The outer agent workflow owns
-    # persistent run logs and final execution-result files.
+    # MCP uses stderr for technical diagnostics so protocol output on stdout
+    # remains clean for the MCP client.
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     console_handler.addFilter(_RequestContextFilter())
