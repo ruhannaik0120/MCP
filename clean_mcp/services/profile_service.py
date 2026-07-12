@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import json
 import os
-from threading import RLock
 from typing import Any
 
-from config import Config, ConfigError
+from config import (
+    CONFIG_ENV_KEYS,
+    Config,
+    ConfigError,
+    has_placeholder_delimiters,
+    has_wrapping_quotes,
+    snowflake_account_format_valid,
+)
 from connectors.factory import SUPPORTED_CONNECTORS
 from services.query_service import get_query_service, reset_query_service
+from services.runtime_state import runtime_lock, runtime_metadata
 
 _PROFILE_ENV_KEYS = {
     "db_type": "DB_TYPE",
@@ -21,9 +28,6 @@ _PROFILE_ENV_KEYS = {
     "timeout_seconds": "DB_TIMEOUT_SECONDS",
     "max_rows": "DB_MAX_ROWS",
 }
-# A re-entrant lock prevents two agent requests from replacing process-wide
-# connection settings at the same time.
-_switch_lock = RLock()
 _active_profile = os.getenv("DB_ACTIVE_PROFILE", "default").strip() or "default"
 
 
@@ -52,29 +56,107 @@ def _profiles() -> dict[str, dict[str, Any]]:
 def _safe_profile(name: str, profile: dict[str, Any]) -> dict[str, Any]:
     """Convert a profile into agent-safe metadata with no credential values."""
 
+    db_type = str(profile.get("db_type", "")).lower()
+    host = str(profile.get("host", "")).strip()
+    database = str(profile.get("database", ""))
+    issues = _profile_issues(profile)
     # Return presence flags rather than credential values. The agent can reason
     # about available systems without ever receiving connection secrets.
     return {
         "name": name,
-        "db_type": str(profile.get("db_type", "")).lower(),
-        "host_present": bool(profile.get("host")),
-        "database": str(profile.get("database", "")),
+        "db_type": db_type,
+        "host_present": bool(host),
+        "host_format_valid": not any(issue.startswith("host_") for issue in issues),
+        "database": database,
+        "database_present": bool(database),
         "username_present": bool(profile.get("username")),
         "password_present": bool(profile.get("password")),
+        "snowflake_account_format_valid": (
+            None if db_type != "snowflake" or not host else snowflake_account_format_valid(host)
+        ),
+        "ready": not issues,
+        "issues": issues,
         "active": name == _active_profile,
     }
+
+
+def _profile_issues(profile: dict[str, Any]) -> list[str]:
+    """Return non-secret readiness issue labels for a profile."""
+
+    issues: list[str] = []
+    db_type = str(profile.get("db_type", "")).strip().lower()
+    host = str(profile.get("host", "")).strip()
+    if not db_type:
+        issues.append("db_type_missing")
+    elif db_type not in SUPPORTED_CONNECTORS:
+        issues.append("db_type_unsupported")
+    if db_type != "demo" and not host:
+        issues.append("host_missing")
+    if host:
+        if has_placeholder_delimiters(host):
+            issues.append("host_placeholder_delimiters")
+        if has_wrapping_quotes(host):
+            issues.append("host_wrapping_quotes")
+    if db_type == "snowflake":
+        if not profile.get("username"):
+            issues.append("username_missing")
+        if host and not snowflake_account_format_valid(host):
+            issues.append("host_snowflake_account_format_invalid")
+    if db_type == "sqlserver" and not profile.get("database"):
+        issues.append("database_missing")
+    if db_type == "sqlserver" and bool(profile.get("username")) != bool(profile.get("password")):
+        issues.append("partial_credentials")
+    return issues
 
 
 def list_connection_profiles() -> dict[str, Any]:
     """Return non-secret metadata for configured connection profiles."""
 
-    profiles = _profiles()
-    return {
-        "active_profile": _active_profile,
-        "count": len(profiles),
-        "profiles": [_safe_profile(name, value) for name, value in sorted(profiles.items())],
-        "supported_connectors": sorted(SUPPORTED_CONNECTORS),
-    }
+    with runtime_lock:
+        profiles = _profiles()
+        return {
+            "active_profile": _active_profile,
+            "count": len(profiles),
+            "profiles": [_safe_profile(name, value) for name, value in sorted(profiles.items())],
+            "supported_connectors": sorted(SUPPORTED_CONNECTORS),
+            **runtime_metadata(),
+        }
+
+
+def reload_runtime_configuration(*, confirm: bool = False) -> dict[str, Any]:
+    """Atomically reload local .env values and discard the cached connector."""
+
+    global _active_profile
+    if not confirm:
+        raise ConfigError("Configuration reload requires explicit user approval: call again with confirm=true.")
+    with runtime_lock:
+        previous_environment = {key: os.environ.get(key) for key in CONFIG_ENV_KEYS}
+        previous_profile = _active_profile
+        try:
+            Config.reload_dotenv(override=True)
+            Config.validate()
+            profiles = _profiles()
+            active_profile = os.getenv("DB_ACTIVE_PROFILE", "default").strip() or "default"
+            safe_profiles = [_safe_profile(name, value) for name, value in sorted(profiles.items())]
+            reset_query_service()
+            _active_profile = active_profile
+            return {
+                "reloaded": True,
+                "active_profile": _active_profile,
+                "configured_profile_count": len(profiles),
+                "profiles": safe_profiles,
+                "supported_connectors": sorted(SUPPORTED_CONNECTORS),
+                **runtime_metadata(),
+            }
+        except Exception:
+            for key, value in previous_environment.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+            _active_profile = previous_profile
+            Config.load()
+            raise
 
 
 def _profile_environment(profile: dict[str, Any]) -> dict[str, str]:
@@ -117,7 +199,7 @@ def switch_connection_profile(name: str, *, confirm: bool = False, test_connecti
     new_values = _profile_environment(profiles[normalized_name])
     affected_keys = set(_PROFILE_ENV_KEYS.values()) | {"DB_ACTIVE_PROFILE"}
 
-    with _switch_lock:
+    with runtime_lock:
         # Snapshot inside the lock so concurrent switch requests cannot capture
         # stale state and later roll back a switch that already succeeded.
         previous = {key: os.environ.get(key) for key in affected_keys}

@@ -28,7 +28,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Test suite failed." }
     # The deterministic demo connector verifies startup without live credentials.
     $env:DB_TYPE = "demo"
+    $env:DB_HOST = "demo-local"
     $env:DB_DATABASE = "qa_demo"
+    $env:DB_USERNAME = ""
+    $env:DB_PASSWORD = ""
+    $env:DB_CONNECTION_OPTIONS = "{}"
+    $env:DB_ACTIVE_PROFILE = "demo-local"
     & $Python tests\smoke_test.py
     if ($LASTEXITCODE -ne 0) { throw "Smoke test failed." }
     Write-Host "All verification gates passed."

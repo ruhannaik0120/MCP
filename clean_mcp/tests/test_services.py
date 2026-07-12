@@ -114,6 +114,50 @@ def test_metadata_calls_delegate(monkeypatch):
     assert [call[0] for call in connector.calls[:3]] == ["list_databases", "list_tables", "describe_table"]
 
 
+def test_suggest_columns_uses_metadata_without_executing_sql(monkeypatch):
+    _configure_settings(monkeypatch)
+
+    class MetadataConnector(FakeConnector):
+        def describe_table(self, database=None, table=None, schema=None, timeout_seconds=None):
+            self.calls.append(("describe_table", database, table, schema, timeout_seconds))
+            return {
+                "database": database,
+                "schema": schema,
+                "table": table,
+                "columns": [
+                    {"COLUMN_NAME": "order_id", "DATA_TYPE": "integer"},
+                    {"COLUMN_NAME": "order_status", "DATA_TYPE": "varchar"},
+                    {"COLUMN_NAME": "created_at", "DATA_TYPE": "timestamp"},
+                ],
+            }
+
+    connector = MetadataConnector()
+    response = QueryService(connector).suggest_columns(
+        table="orders",
+        missing_column="status",
+        database="sales",
+        schema="dbo",
+    ).to_dict()
+
+    assert response["success"] is True
+    assert response["suggestions"][0]["column"] == "order_status"
+    assert response["sql_modified"] is False
+    assert response["sql_executed"] is False
+    assert response["approval_required_before_revised_sql"] is True
+    assert [call[0] for call in connector.calls] == ["describe_table"]
+
+
+def test_suggest_columns_requires_table_and_column(monkeypatch):
+    _configure_settings(monkeypatch)
+    connector = FakeConnector()
+
+    response = QueryService(connector).suggest_columns(table="", missing_column="status").to_dict()
+
+    assert response["success"] is False
+    assert response["error"]["code"] == ErrorCode.CONFIG_INVALID
+    assert connector.calls == []
+
+
 def test_response_preserves_reserved_fields(monkeypatch):
     _configure_settings(monkeypatch)
     service = QueryService(FakeConnector())
@@ -134,6 +178,8 @@ def test_response_preserves_reserved_fields(monkeypatch):
     assert response["data"]["success"] is False
     assert response["data"]["request_id"] == "shadow"
     assert response["custom"] == "value"
+    assert response["metadata"]["session_isolation"] == "one_client_per_process"
+    assert response["metadata"]["runtime_id"]
 
 
 def test_execute_query_executes_approved_write_statement(monkeypatch):
@@ -147,6 +193,31 @@ def test_execute_query_executes_approved_write_statement(monkeypatch):
     assert response["tool"] == "execute_query"
     assert response["query"] == "DELETE FROM items"
     assert connector.calls[0][1] == "DELETE FROM items"
+
+
+def test_execute_query_rejects_conflicting_sql_arguments(monkeypatch):
+    _configure_settings(monkeypatch)
+    connector = FakeConnector()
+    service = QueryService(connector)
+
+    response = service.execute_query(sql="SELECT 1", query="DELETE FROM items").to_dict()
+
+    assert response["success"] is False
+    assert response["error"]["code"] == ErrorCode.CONFIG_INVALID
+    assert connector.calls == []
+
+
+def test_execute_query_rejects_database_outside_active_profile(monkeypatch):
+    _configure_settings(monkeypatch)
+    connector = FakeConnector()
+    service = QueryService(connector)
+
+    response = service.execute_query(sql="SELECT 1", database="another_database").to_dict()
+
+    assert response["success"] is False
+    assert response["error"]["code"] == ErrorCode.CONFIG_INVALID
+    assert "profile switch" in response["error"]["detail"]
+    assert connector.calls == []
 
 
 def test_deprecated_alias_uses_same_generic_execution_path(monkeypatch):

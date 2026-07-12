@@ -35,6 +35,8 @@ def test_mysql_connection_arguments(monkeypatch):
         "user": "qa_user",
         "password": "qa_password",
         "connection_timeout": 12,
+        "read_timeout": 12,
+        "write_timeout": 12,
         "database": "qa_demo",
         "ssl_disabled": True,
     }
@@ -52,6 +54,7 @@ def test_postgresql_connection_arguments(monkeypatch):
         "user": "qa_user",
         "password": "qa_password",
         "connect_timeout": 12,
+        "options": "-c statement_timeout=12000",
         "sslmode": "require",
     }
 
@@ -83,8 +86,10 @@ class _WriteCursor:
     description = None
     rowcount = 2
 
-    def execute(self, query):
+    def execute(self, query, *args, **kwargs):
         self.query = query
+        self.execute_args = args
+        self.execute_kwargs = kwargs
 
     def close(self):
         return None
@@ -129,3 +134,34 @@ def test_transactional_connectors_commit_writes(monkeypatch, db_type, connector_
 
     assert connection.committed is True
     assert result["rows_affected"] == 2
+
+
+def test_postgresql_commits_write_returning_rows(monkeypatch):
+    _configure(monkeypatch, "postgresql")
+    connector = PostgreSQLConnector()
+    connection = _WriteConnection()
+    connection.cursor_object.description = [type("Column", (), {"name": "id"})()]
+    connection.cursor_object.rowcount = 1
+    connection.cursor_object.fetchmany = lambda size: [(1,)]
+
+    @contextmanager
+    def fake_connection(*args, **kwargs):
+        yield connection
+
+    monkeypatch.setattr(connector, "_connection", fake_connection)
+
+    result = connector.execute_query("INSERT INTO items VALUES (1) RETURNING id")
+
+    assert connection.committed is True
+    assert result["rows"] == [{"id": 1}]
+
+
+def test_snowflake_execute_passes_statement_timeout(monkeypatch):
+    _configure(monkeypatch, "snowflake")
+    connector = SnowflakeConnector()
+    cursor = _WriteCursor()
+
+    connector._execute(cursor, "SELECT 1", timeout_seconds=7)
+
+    assert cursor.query == "SELECT 1"
+    assert cursor.execute_kwargs["timeout"] == 7

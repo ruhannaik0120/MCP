@@ -18,7 +18,9 @@ from tools import (
     health,
     list_databases,
     list_profiles,
+    reload_config,
     list_tables,
+    suggest_columns,
     switch_profile,
     test_connection,
 )
@@ -52,6 +54,22 @@ def tool_switch_connection_profile(name: str, confirm: bool = False) -> str:
         return json.dumps({"success": True, "data": payload}, indent=2, default=str)
     except Exception as exc:
         return json.dumps({"success": False, "error": {"code": "PROFILE_SWITCH_FAILED", "message": Config.redact_text(exc)}}, indent=2)
+
+
+@mcp.tool()
+def tool_reload_configuration(confirm: bool = False) -> str:
+    """Reload local runtime configuration after explicit approval.
+
+    Use this after updating the approved local .env file.
+    Existing cached connectors are discarded so later tool calls use the new
+    configuration snapshot.
+    """
+
+    try:
+        payload = reload_config(confirm=confirm)
+        return json.dumps({"success": True, "data": payload}, indent=2, default=str)
+    except Exception as exc:
+        return json.dumps({"success": False, "error": {"code": "CONFIG_RELOAD_FAILED", "message": Config.redact_text(exc)}}, indent=2)
 
 
 @mcp.tool()
@@ -119,6 +137,25 @@ def tool_describe_table(
 
 
 @mcp.tool()
+def tool_suggest_columns(
+    table: str,
+    missing_column: str,
+    database: str = "",
+    schema: str = "",
+    environment: str = "",
+    timeout_seconds: int | None = None,
+    limit: int = 5,
+) -> str:
+    """Rank similar real columns without rewriting or executing SQL."""
+
+    return json.dumps(
+        suggest_columns(table, missing_column, database, schema, environment, timeout_seconds, limit),
+        indent=2,
+        default=str,
+    )
+
+
+@mcp.tool()
 def tool_execute_query(
     sql: str = "",
     query: str = "",
@@ -128,7 +165,12 @@ def tool_execute_query(
     timeout_seconds: int | None = None,
     max_rows: int | None = None,
 ) -> str:
-    """Execute an approved SQL command/query using the active database profile."""
+    """Execute approved SQL against the active profile's configured database.
+
+    The compatibility schema argument is returned as request context only; SQL
+    must qualify its own schema. Targeting another database requires an approved
+    profile switch.
+    """
 
     # The legacy select-named tool below remains available for existing clients.
     return json.dumps(

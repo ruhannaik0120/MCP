@@ -5,25 +5,75 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import ClassVar
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 from connectors.factory import SUPPORTED_CONNECTORS
 
-load_dotenv()
+_DOTENV_PATH = Path(__file__).with_name(".env")
+load_dotenv(dotenv_path=_DOTENV_PATH)
 
-_SENSITIVE_OPTION_KEYS = frozenset(
+CONFIG_ENV_KEYS = frozenset(
+    {
+        "DB_TYPE",
+        "DB_HOST",
+        "DB_DATABASE",
+        "DB_USERNAME",
+        "DB_PASSWORD",
+        "DB_CONNECTION_OPTIONS",
+        "DB_TIMEOUT_SECONDS",
+        "DB_MAX_ROWS",
+        "DB_ACTIVE_PROFILE",
+        "DB_PROFILES_JSON",
+        "LOG_LEVEL",
+    }
+)
+
+_SENSITIVE_OPTION_KEY_PARTS = frozenset(
     {
         "password",
+        "passwd",
+        "pwd",
         "secret",
         "token",
-        "private_key",
-        "private_key_passphrase",
-        "access_token",
-        "connection_string",
+        "privatekey",
+        "passphrase",
+        "credential",
+        "apikey",
+        "authorization",
         "connectionstring",
+    }
+)
+_RESERVED_CONNECTION_OPTION_KEYS = frozenset(
+    {
+        "host",
+        "server",
+        "datasource",
+        "address",
+        "networkaddress",
+        "account",
+        "user",
+        "username",
+        "userid",
+        "uid",
+        "password",
+        "passwd",
+        "pwd",
+        "database",
+        "dbname",
+        "initialcatalog",
+        "timeout",
+        "connectiontimeout",
+        "connecttimeout",
+        "logintimeout",
+        "readtimeout",
+        "writetimeout",
+        "networktimeout",
+        "sockettimeout",
     }
 )
 
@@ -34,6 +84,29 @@ def _normalize_text(value: str | None, default: str = "") -> str:
     if value is None:
         return default
     return value.strip() or default
+
+
+def has_placeholder_delimiters(value: str) -> bool:
+    """Return true when a value still looks like a documented placeholder."""
+
+    stripped = value.strip()
+    return len(stripped) >= 2 and stripped[0] == "<" and stripped[-1] == ">"
+
+
+def has_wrapping_quotes(value: str) -> bool:
+    """Return true when a value includes literal shell/documentation quotes."""
+
+    stripped = value.strip()
+    return len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {"'", '"'}
+
+
+def snowflake_account_format_valid(value: str) -> bool:
+    """Validate connector-style account names and locator/region identifiers."""
+
+    normalized = value.strip()
+    if not normalized or ".snowflakecomputing.com" in normalized.lower():
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*", normalized))
 
 
 def _as_int(value: str | None, default: int) -> int:
@@ -61,19 +134,53 @@ def _as_dict(value: str | None) -> dict[str, object]:
     return parsed
 
 
+def _normalized_option_key(key: object) -> str:
+    """Normalize driver option names for security comparisons."""
+
+    return re.sub(r"[^a-z0-9]", "", str(key).lower())
+
+
+def _is_sensitive_option_key(key: object) -> bool:
+    normalized_key = _normalized_option_key(key)
+    return any(part in normalized_key for part in _SENSITIVE_OPTION_KEY_PARTS)
+
+
+def _redact_option_value(value: object, key: object = "") -> object:
+    if _is_sensitive_option_key(key):
+        return "[REDACTED]"
+    if isinstance(value, dict):
+        return {str(item_key): _redact_option_value(item_value, item_key) for item_key, item_value in value.items()}
+    if isinstance(value, list):
+        return [_redact_option_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_redact_option_value(item) for item in value]
+    return value
+
+
 def _redact_connection_options(options: dict[str, object]) -> dict[str, object]:
-    """Copy connection options while replacing recognized secret values."""
+    """Recursively copy connection options while replacing secret values."""
 
     # Diagnostics may be shown to an AI client, so secret-like option values
     # are replaced before configuration leaves the process boundary.
-    redacted: dict[str, object] = {}
-    for key, value in options.items():
-        normalized_key = key.lower().replace("-", "_").replace(" ", "_")
-        if normalized_key in _SENSITIVE_OPTION_KEYS:
-            redacted[key] = "[REDACTED]"
-        else:
-            redacted[key] = value
-    return redacted
+    return {str(key): _redact_option_value(value, key) for key, value in options.items()}
+
+
+def _secret_option_values(value: object, key: object = "") -> list[str]:
+    """Collect configured secret values so exception text can be scrubbed."""
+
+    if _is_sensitive_option_key(key):
+        return [str(value)] if value not in (None, "") else []
+    if isinstance(value, dict):
+        secrets: list[str] = []
+        for item_key, item_value in value.items():
+            secrets.extend(_secret_option_values(item_value, item_key))
+        return secrets
+    if isinstance(value, (list, tuple)):
+        secrets = []
+        for item in value:
+            secrets.extend(_secret_option_values(item))
+        return secrets
+    return []
 
 
 class ConfigError(ValueError):
@@ -122,6 +229,24 @@ class Config:
     LOG_LEVEL: ClassVar[str] = "INFO"
 
     @classmethod
+    def reload_dotenv(cls, *, override: bool = True) -> "Config":
+        """Replace recognized runtime settings from the local .env file."""
+
+        if not _DOTENV_PATH.is_file():
+            raise ConfigError(f"Local configuration file was not found: {_DOTENV_PATH}.")
+        values = dotenv_values(_DOTENV_PATH)
+        if override:
+            # The local file is authoritative for recognized settings. Clearing
+            # absent keys prevents a removed credential from remaining in memory.
+            for key in CONFIG_ENV_KEYS:
+                os.environ.pop(key, None)
+        for key in CONFIG_ENV_KEYS:
+            value = values.get(key)
+            if value is not None and (override or key not in os.environ):
+                os.environ[key] = value
+        return cls.load()
+
+    @classmethod
     def load(cls) -> "Config":
         """Refresh process-wide settings from environment variables."""
 
@@ -155,6 +280,11 @@ class Config:
 
         if cls.DB_TYPE != "demo" and not cls.HOST:
             errors.append("DB_HOST is required for the selected connector.")
+        if cls.HOST:
+            if has_placeholder_delimiters(cls.HOST):
+                errors.append("DB_HOST must be an actual host/account value, not a <placeholder>.")
+            if has_wrapping_quotes(cls.HOST):
+                errors.append("DB_HOST must not include literal wrapping quotes.")
 
         if cls.LOG_LEVEL not in logging._nameToLevel:
             errors.append("LOG_LEVEL must be a valid logging level.")
@@ -178,6 +308,17 @@ class Config:
         """Validate generic options shared across connector implementations."""
 
         errors: list[str] = []
+        reserved = sorted(
+            str(key)
+            for key in cls.CONNECTION_OPTIONS
+            if _normalized_option_key(key) in _RESERVED_CONNECTION_OPTION_KEYS
+        )
+        if reserved:
+            errors.append(
+                "DB_CONNECTION_OPTIONS cannot override profile-controlled fields: "
+                + ", ".join(reserved)
+                + "."
+            )
         port = cls.CONNECTION_OPTIONS.get("port")
         if port is not None:
             try:
@@ -193,8 +334,14 @@ class Config:
         errors: list[str] = []
         if cls.DB_TYPE == "sqlserver" and not cls.DATABASE:
             errors.append("DB_DATABASE is required for the SQL Server connector.")
+        if cls.DB_TYPE == "sqlserver" and bool(cls.USERNAME) != bool(cls.PASSWORD):
+            errors.append("DB_USERNAME and DB_PASSWORD must either both be set or both be empty.")
         if cls.DB_TYPE == "snowflake" and not cls.USERNAME:
             errors.append("DB_USERNAME is required for the Snowflake connector.")
+        if cls.DB_TYPE == "snowflake" and cls.HOST and not snowflake_account_format_valid(cls.HOST):
+            errors.append(
+                "DB_HOST for Snowflake must be an account identifier without a URL or snowflakecomputing.com suffix."
+            )
         if cls.DB_TYPE == "demo" and not cls.DATABASE:
             cls.DATABASE = "qa_demo"
         return errors
@@ -253,6 +400,9 @@ class Config:
             "timeout_seconds": cls.GLOBAL_TIMEOUT_SECONDS,
             "max_rows": cls.GLOBAL_MAX_ROWS,
             "connection_options": _redact_connection_options(dict(cls.CONNECTION_OPTIONS)),
+            "configuration_source": (
+                "environment_with_local_dotenv_fallback" if _DOTENV_PATH.is_file() else "environment"
+            ),
             "supported_connectors": sorted(SUPPORTED_CONNECTORS),
         }
 
@@ -261,14 +411,17 @@ class Config:
         """Remove configured credential values from an external error message."""
 
         text = str(value)
-        secrets = [cls.PASSWORD]
-        for key, option_value in cls.CONNECTION_OPTIONS.items():
-            normalized_key = key.lower().replace("-", "_").replace(" ", "_")
-            if normalized_key in _SENSITIVE_OPTION_KEYS:
-                secrets.append(str(option_value))
-        for secret in secrets:
+        secrets = [cls.PASSWORD, *_secret_option_values(cls.CONNECTION_OPTIONS)]
+        for secret in sorted(set(secrets), key=len, reverse=True):
             if secret:
                 text = text.replace(secret, "[REDACTED]")
+        text = re.sub(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+", "[REDACTED]", text)
+        text = re.sub(
+            r"(?i)\b(password|passwd|pwd|token|secret|api[_-]?key|authorization)\s*[:=]\s*([^\s,;]+)",
+            r"\1=[REDACTED]",
+            text,
+        )
+        text = re.sub(r"(?i)([a-z][a-z0-9+.-]*://)[^/@\s:]+:[^/@\s]+@", r"\1[REDACTED]@", text)
         return text
 
 

@@ -14,8 +14,12 @@ $Venv = Join-Path $WorkspaceRoot ".venv"
 if (Test-Path $Venv) {
     # Validate the existing interpreter instead of assuming the folder is usable.
     $Python = Join-Path $Venv "Scripts\python.exe"
-    & $Python --version *> $null
-    if ($LASTEXITCODE -ne 0) {
+    $VenvHealthy = $false
+    if (Test-Path $Python) {
+        & $Python --version *> $null
+        $VenvHealthy = $LASTEXITCODE -eq 0
+    }
+    if (-not $VenvHealthy) {
         Remove-Item -Recurse -Force $Venv
     }
 }
@@ -35,8 +39,8 @@ if (-not (Test-Path $Venv)) {
 
 $Python = Join-Path $Venv "Scripts\python.exe"
 # Install with the virtual-environment interpreter to avoid global packages.
-& $Python -m pip install --upgrade pip
-if ($LASTEXITCODE -ne 0) { throw "Failed to upgrade pip." }
+& $Python -m pip install "pip>=26.1.2"
+if ($LASTEXITCODE -ne 0) { throw "Failed to install the minimum secure pip version." }
 & $Python -m pip install -r (Join-Path $ProjectRoot "requirements.txt")
 if ($LASTEXITCODE -ne 0) { throw "Failed to install project dependencies." }
 Write-Host "Environment ready: $Python"

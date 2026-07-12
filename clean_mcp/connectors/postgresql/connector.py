@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 from config import Config, ConfigError, ConnectionConfig
-from connectors.base import DatabaseConnector
+from connectors.base import DatabaseConnector, unique_column_names
 
 
 class PostgreSQLConnector(DatabaseConnector):
@@ -34,17 +34,26 @@ class PostgreSQLConnector(DatabaseConnector):
         """Select an explicit database, configured default, or postgres."""
         return (database or fallback or "postgres").strip() or "postgres"
 
-    def _connection_kwargs(self, profile: ConnectionConfig, database: str) -> dict[str, Any]:
+    def _connection_kwargs(
+        self,
+        profile: ConnectionConfig,
+        database: str,
+        timeout_seconds: int | None = None,
+    ) -> dict[str, Any]:
         """Translate framework configuration into psycopg arguments."""
         options = dict(profile.connection_options or {})
         port = int(options.pop("port", 5432))
+        existing_server_options = str(options.pop("options", "")).strip()
+        effective_timeout = timeout_seconds if timeout_seconds is not None else profile.timeout_seconds
+        statement_timeout = f"-c statement_timeout={effective_timeout * 1000}"
         kwargs: dict[str, Any] = {
             "host": profile.host,
             "port": port,
             "dbname": database,
             "user": profile.username or None,
             "password": profile.password or None,
-            "connect_timeout": profile.timeout_seconds,
+            "connect_timeout": effective_timeout,
+            "options": f"{existing_server_options} {statement_timeout}".strip(),
         }
         kwargs.update(options)
         return {key: value for key, value in kwargs.items() if value is not None}
@@ -64,7 +73,7 @@ class PostgreSQLConnector(DatabaseConnector):
 
     def _fetch_rows(self, cursor, max_rows: int | None = None) -> dict[str, Any]:
         """Convert driver tuples into JSON-ready dictionaries by column name."""
-        columns = [column.name for column in cursor.description] if cursor.description else []
+        columns = unique_column_names([column.name for column in cursor.description]) if cursor.description else []
         raw_rows = cursor.fetchmany(max_rows) if columns and max_rows and hasattr(cursor, "fetchmany") else cursor.fetchall() if columns else []
         rows = [dict(zip(columns, row)) for row in raw_rows[:max_rows] if columns] if max_rows else [dict(zip(columns, row)) for row in raw_rows]
         return {"columns": columns, "rows": rows}
@@ -73,9 +82,7 @@ class PostgreSQLConnector(DatabaseConnector):
         """Open a PostgreSQL connection with the active profile and timeout."""
         profile = self._profile()
         target_database = self._normalize_database(database, profile.database)
-        kwargs = self._connection_kwargs(profile, target_database)
-        if timeout_seconds is not None:
-            kwargs["connect_timeout"] = timeout_seconds
+        kwargs = self._connection_kwargs(profile, target_database, timeout_seconds)
         return self._driver().connect(**kwargs)
 
     @contextlib.contextmanager
@@ -186,10 +193,9 @@ class PostgreSQLConnector(DatabaseConnector):
             cursor.execute(limited_query)
             payload = self._fetch_rows(cursor, max_rows or profile.max_rows)
             rows_affected = cursor.rowcount if cursor.description is None else len(payload["rows"])
-            if cursor.description is None:
-                # psycopg opens a transaction automatically, so successful
-                # writes must be committed before the connection is closed.
-                conn.commit()
+            # psycopg opens a transaction automatically. Commit every successful
+            # execution so DML with RETURNING is not rolled back on close.
+            conn.commit()
             cursor.close()
         return {"connector_type": self.__class__.__name__, "db_type": profile.db_type, "database": target_database, "columns": payload["columns"], "rows": payload["rows"], "rows_affected": rows_affected}
 

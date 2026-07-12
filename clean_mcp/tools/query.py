@@ -5,6 +5,7 @@ service layer and serialize its standard response contract.
 """
 
 from services import query_service
+from services.runtime_state import runtime_lock
 
 
 def execute_query(
@@ -16,17 +17,18 @@ def execute_query(
     timeout_seconds: int | None = None,
     max_rows: int | None = None,
 ) -> dict:
-    """Execute an approved SQL command using the active database profile."""
+    """Execute approved SQL against the active profile's configured database."""
 
-    return query_service.execute_query(
-        sql=sql,
-        query=query,
-        database=database,
-        schema=schema,
-        environment=environment,
-        timeout_seconds=timeout_seconds,
-        max_rows=max_rows,
-    ).to_dict()
+    with runtime_lock:
+        return query_service.execute_query(
+            sql=sql,
+            query=query,
+            database=database,
+            schema=schema,
+            environment=environment,
+            timeout_seconds=timeout_seconds,
+            max_rows=max_rows,
+        ).to_dict()
 
 
 def execute_select_query(
@@ -40,12 +42,13 @@ def execute_select_query(
 ) -> dict:
     """Deprecated compatibility alias for the generic execution tool."""
 
-    return query_service.execute_select_query(
-        sql=sql,
-        query=query,
-        database=database,
-        schema=schema,
-        environment=environment,
-        timeout_seconds=timeout_seconds,
-        max_rows=max_rows,
-    ).to_dict()
+    with runtime_lock:
+        return query_service.execute_select_query(
+            sql=sql,
+            query=query,
+            database=database,
+            schema=schema,
+            environment=environment,
+            timeout_seconds=timeout_seconds,
+            max_rows=max_rows,
+        ).to_dict()

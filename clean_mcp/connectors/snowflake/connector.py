@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 from config import Config, ConfigError, ConnectionConfig
-from connectors.base import DatabaseConnector
+from connectors.base import DatabaseConnector, unique_column_names
 
 
 class SnowflakeConnector(DatabaseConnector):
@@ -69,9 +69,17 @@ class SnowflakeConnector(DatabaseConnector):
             return normalized_sql[: fetch_match.start(1)] + str(safe_limit) + normalized_sql[fetch_match.end(1) :]
         return f"{normalized_sql} LIMIT {max_rows}"
 
+    def _execute(self, cursor: Any, query: str, params: Any = None, timeout_seconds: int | None = None) -> Any:
+        """Execute one Snowflake statement with the framework command timeout."""
+
+        effective_timeout = timeout_seconds or self._profile().timeout_seconds
+        if params is None:
+            return cursor.execute(query, timeout=effective_timeout)
+        return cursor.execute(query, params, timeout=effective_timeout)
+
     def _fetch_rows(self, cursor, max_rows: int | None = None) -> dict[str, Any]:
         """Convert Snowflake tuples into JSON-ready dictionaries."""
-        columns = [column[0] for column in cursor.description] if cursor.description else []
+        columns = unique_column_names([column[0] for column in cursor.description]) if cursor.description else []
         raw_rows = cursor.fetchmany(max_rows) if columns and max_rows and hasattr(cursor, "fetchmany") else cursor.fetchall() if columns else []
         rows = [dict(zip(columns, row)) for row in raw_rows[:max_rows] if columns] if max_rows else [dict(zip(columns, row)) for row in raw_rows]
         return {"columns": columns, "rows": rows}
@@ -101,14 +109,16 @@ class SnowflakeConnector(DatabaseConnector):
         with self._connection(database=target_database or None, timeout_seconds=timeout_seconds) as conn:
             cursor = conn.cursor()
             try:
-                cursor.execute(
+                self._execute(
+                    cursor,
                     """
                     SELECT
                         CURRENT_ACCOUNT() AS server_name,
                         CURRENT_VERSION() AS version,
                         CURRENT_USER() AS logged_in_user,
                         CURRENT_TIMESTAMP() AS utc_time
-                    """
+                    """,
+                    timeout_seconds=timeout_seconds,
                 )
                 snapshot = self._fetch_rows(cursor)
             finally:
@@ -131,12 +141,14 @@ class SnowflakeConnector(DatabaseConnector):
         with self._connection(timeout_seconds=timeout_seconds) as conn:
             cursor = conn.cursor()
             try:
-                cursor.execute(
+                self._execute(
+                    cursor,
                     """
                     SELECT DATABASE_NAME AS name
                     FROM INFORMATION_SCHEMA.DATABASES
                     ORDER BY DATABASE_NAME
-                    """
+                    """,
+                    timeout_seconds=timeout_seconds,
                 )
                 payload = self._fetch_rows(cursor)
             finally:
@@ -153,7 +165,8 @@ class SnowflakeConnector(DatabaseConnector):
         with self._connection(database=target_database, timeout_seconds=timeout_seconds) as conn:
             cursor = conn.cursor()
             try:
-                cursor.execute(
+                self._execute(
+                    cursor,
                     """
                     SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
                     FROM INFORMATION_SCHEMA.TABLES
@@ -161,6 +174,7 @@ class SnowflakeConnector(DatabaseConnector):
                     ORDER BY TABLE_SCHEMA, TABLE_NAME
                     """,
                     (target_schema.upper(),),
+                    timeout_seconds=timeout_seconds,
                 )
                 payload = self._fetch_rows(cursor)
             finally:
@@ -179,7 +193,8 @@ class SnowflakeConnector(DatabaseConnector):
         with self._connection(database=target_database, timeout_seconds=timeout_seconds) as conn:
             cursor = conn.cursor()
             try:
-                cursor.execute(
+                self._execute(
+                    cursor,
                     """
                     SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH, ORDINAL_POSITION
                     FROM INFORMATION_SCHEMA.COLUMNS
@@ -187,6 +202,7 @@ class SnowflakeConnector(DatabaseConnector):
                     ORDER BY ORDINAL_POSITION
                     """,
                     (target_schema.upper(), table.upper()),
+                    timeout_seconds=timeout_seconds,
                 )
                 payload = self._fetch_rows(cursor)
             finally:
@@ -201,7 +217,7 @@ class SnowflakeConnector(DatabaseConnector):
         with self._connection(database=target_database or None, timeout_seconds=timeout_seconds) as conn:
             cursor = conn.cursor()
             try:
-                cursor.execute(limited_query)
+                self._execute(cursor, limited_query, timeout_seconds=timeout_seconds)
                 payload = self._fetch_rows(cursor, max_rows or profile.max_rows)
                 rows_affected = cursor.rowcount if cursor.description is None else len(payload["rows"])
                 if cursor.description is None:

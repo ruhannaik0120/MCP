@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 from config import Config, ConfigError, ConnectionConfig
-from connectors.base import DatabaseConnector
+from connectors.base import DatabaseConnector, unique_column_names
 
 
 class MySQLConnector(DatabaseConnector):
@@ -34,16 +34,24 @@ class MySQLConnector(DatabaseConnector):
         """Select an explicit database or fall back to the configured default."""
         return (database or fallback or "").strip()
 
-    def _connection_kwargs(self, profile: ConnectionConfig, database: str | None = None) -> dict[str, Any]:
+    def _connection_kwargs(
+        self,
+        profile: ConnectionConfig,
+        database: str | None = None,
+        timeout_seconds: int | None = None,
+    ) -> dict[str, Any]:
         """Translate framework configuration into MySQL driver arguments."""
         options = dict(profile.connection_options or {})
         port = int(options.pop("port", 3306))
+        effective_timeout = timeout_seconds if timeout_seconds is not None else profile.timeout_seconds
         kwargs: dict[str, Any] = {
             "host": profile.host,
             "port": port,
             "user": profile.username,
             "password": profile.password,
-            "connection_timeout": profile.timeout_seconds,
+            "connection_timeout": effective_timeout,
+            "read_timeout": effective_timeout,
+            "write_timeout": effective_timeout,
         }
         if database:
             kwargs["database"] = database
@@ -65,7 +73,7 @@ class MySQLConnector(DatabaseConnector):
 
     def _fetch_rows(self, cursor, max_rows: int | None = None) -> dict[str, Any]:
         """Convert driver tuples into JSON-ready dictionaries by column name."""
-        columns = [column[0] for column in cursor.description] if cursor.description else []
+        columns = unique_column_names([column[0] for column in cursor.description]) if cursor.description else []
         raw_rows = cursor.fetchmany(max_rows) if columns and max_rows and hasattr(cursor, "fetchmany") else cursor.fetchall() if columns else []
         rows = [dict(zip(columns, row)) for row in raw_rows[:max_rows] if columns] if max_rows else [dict(zip(columns, row)) for row in raw_rows]
         return {"columns": columns, "rows": rows}
@@ -74,9 +82,7 @@ class MySQLConnector(DatabaseConnector):
         """Open a MySQL connection with the active profile and timeout."""
         profile = self._profile()
         target_database = self._normalize_database(database, profile.database)
-        kwargs = self._connection_kwargs(profile, target_database or None)
-        if timeout_seconds is not None:
-            kwargs["connection_timeout"] = timeout_seconds
+        kwargs = self._connection_kwargs(profile, target_database or None, timeout_seconds)
         return self._driver().connect(**kwargs)
 
     @contextlib.contextmanager

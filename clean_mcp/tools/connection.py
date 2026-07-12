@@ -5,6 +5,7 @@ logic directly in the MCP entrypoint.
 """
 
 from services import query_service
+from services.runtime_state import runtime_lock
 
 
 def test_connection(
@@ -23,10 +24,16 @@ def test_connection(
         A structured response dictionary.
     """
 
-    return query_service.test_connection(environment=environment, database=database, timeout_seconds=timeout_seconds).to_dict()
+    with runtime_lock:
+        return query_service.test_connection(
+            environment=environment,
+            database=database,
+            timeout_seconds=timeout_seconds,
+        ).to_dict()
 
 
 def health(environment: str = "", timeout_seconds: int | None = None) -> dict:
     """Return a diagnostic health summary for the active connector."""
 
-    return query_service.health(environment=environment, timeout_seconds=timeout_seconds).to_dict()
+    with runtime_lock:
+        return query_service.health(environment=environment, timeout_seconds=timeout_seconds).to_dict()

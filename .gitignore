@@ -2,7 +2,9 @@
 .pytest_cache/
 **/.pytest-tmp/
 .agents/
-clean_mcp/.env
+.env
+.env.*
+!**/.env.example
 clean_mcp/.test-runtime/
 **/__pycache__/
 *.py[cod]
@@ -14,3 +16,8 @@ htmlcov/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Generated E2E PoC run artifacts (keep folder documentation in Git)
+poc_runs/*
+!poc_runs/.gitkeep
+!poc_runs/README.md

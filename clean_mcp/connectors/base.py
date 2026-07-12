@@ -6,6 +6,23 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 
+def unique_column_names(columns: list[object]) -> list[str]:
+    """Return deterministic JSON keys without dropping duplicate result columns."""
+
+    used: set[str] = set()
+    normalized: list[str] = []
+    for raw_name in columns:
+        base_name = str(raw_name)
+        candidate = base_name
+        suffix = 2
+        while candidate in used:
+            candidate = f"{base_name}_{suffix}"
+            suffix += 1
+        used.add(candidate)
+        normalized.append(candidate)
+    return normalized
+
+
 class DatabaseConnector(ABC):
     """Stable contract implemented by every database backend.
 

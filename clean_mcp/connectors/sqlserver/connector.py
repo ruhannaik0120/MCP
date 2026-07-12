@@ -7,12 +7,18 @@ import re
 from typing import Any
 
 from config import Config, ConfigError, ConnectionConfig
-from connectors.base import DatabaseConnector
+from connectors.base import DatabaseConnector, unique_column_names
 from logger import logger
 
 
 class SQLServerConnector(DatabaseConnector):
     """Connector implementation for SQL Server via pyodbc."""
+
+    @staticmethod
+    def _odbc_value(value: object) -> str:
+        """Brace-escape an ODBC value so delimiters cannot add attributes."""
+
+        return "{" + str(value).replace("}", "}}") + "}"
 
     def _driver(self):
         """Load pyodbc only when the SQL Server backend is selected."""
@@ -47,13 +53,20 @@ class SQLServerConnector(DatabaseConnector):
         """Build secure ODBC options from generic and SQL-specific settings."""
         options = dict(profile.connection_options or {})
         driver = str(options.pop("driver", "ODBC Driver 18 for SQL Server")).strip() or "ODBC Driver 18 for SQL Server"
-        parts = [f"DRIVER={{{driver}}}", f"SERVER={profile.host}"]
+        parts = [f"DRIVER={self._odbc_value(driver)}", f"SERVER={self._odbc_value(profile.host)}"]
         # Explicit credentials take precedence; otherwise local Windows trusted
         # authentication supports a password-free developer setup.
+        if bool(profile.username) != bool(profile.password):
+            raise ConfigError("DB_USERNAME and DB_PASSWORD must either both be set or both be empty.")
         if profile.username and profile.password:
-            parts.extend([f"UID={profile.username}", f"PWD={profile.password}"])
+            parts.extend(
+                [
+                    f"UID={self._odbc_value(profile.username)}",
+                    f"PWD={self._odbc_value(profile.password)}",
+                ]
+            )
         else:
-            parts.append("Trusted_Connection=yes")
+            parts.append(f"Trusted_Connection={self._odbc_value('yes')}")
 
         # ODBC 18 enables encryption by default. Local SQL Express instances
         # normally lack a trusted TLS certificate, while remote environments
@@ -62,18 +75,20 @@ class SQLServerConnector(DatabaseConnector):
         is_local = server_name in {"localhost", ".", "(local)", "127.0.0.1", "::1"}
         normalized_options = {str(key).lower(): value for key, value in options.items()}
         if "encrypt" not in normalized_options:
-            parts.append(f"Encrypt={'no' if is_local else 'yes'}")
+            parts.append(f"Encrypt={self._odbc_value('no' if is_local else 'yes')}")
         if "trustservercertificate" not in normalized_options:
-            parts.append(f"TrustServerCertificate={'yes' if is_local else 'no'}")
+            parts.append(f"TrustServerCertificate={self._odbc_value('yes' if is_local else 'no')}")
 
         for key, value in options.items():
+            if not re.fullmatch(r"[A-Za-z][A-Za-z0-9 _-]*", str(key)):
+                raise ConfigError(f"Invalid ODBC connection option name: {key!r}.")
             rendered_value = "yes" if value is True else "no" if value is False else value
-            parts.append(f"{key}={rendered_value}")
+            parts.append(f"{key}={self._odbc_value(rendered_value)}")
         return ";".join(parts) + ";"
 
     def _build_connection_string(self, profile: ConnectionConfig, database: str) -> str:
         """Compose the complete ODBC connection string for one database."""
-        return self._connection_options(profile) + f"DATABASE={database};"
+        return self._connection_options(profile) + f"DATABASE={self._odbc_value(database)};"
 
     def _row_limit_sql(self, sql: str, max_rows: int) -> str:
         """Apply SQL Server TOP limits to eligible row-returning statements."""
@@ -123,6 +138,8 @@ class SQLServerConnector(DatabaseConnector):
         try:
             connection = driver.connect(conn_str, timeout=command_timeout)
             connection.autocommit = True
+            # pyodbc's connection timeout controls subsequent statement execution.
+            connection.timeout = command_timeout
             logger.info(
                 "Connection established successfully.",
                 extra={
@@ -168,7 +185,7 @@ class SQLServerConnector(DatabaseConnector):
 
     def _fetch_rows(self, cursor, max_rows: int | None = None) -> dict[str, Any]:
         """Convert ODBC rows into JSON-ready dictionaries by column name."""
-        columns = [column[0] for column in cursor.description] if cursor.description else []
+        columns = unique_column_names([column[0] for column in cursor.description]) if cursor.description else []
         raw_rows = cursor.fetchmany(max_rows) if columns and max_rows and hasattr(cursor, "fetchmany") else cursor.fetchall() if columns else []
         rows = [dict(zip(columns, row)) for row in raw_rows[:max_rows] if columns] if max_rows else [dict(zip(columns, row)) for row in raw_rows]
         return {"columns": columns, "rows": rows}

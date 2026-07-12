@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 import os
 from time import perf_counter
 from uuid import uuid4
@@ -11,6 +12,7 @@ from connectors.factory import ConnectorFactory
 from logger import logger, reset_environment, reset_request_id, set_environment, set_request_id
 from models.errors import ErrorCode, StructuredError
 from models.responses import ToolResponse
+from services.runtime_state import runtime_lock, runtime_metadata
 from validation.sql_guard import validate_query
 
 
@@ -37,6 +39,18 @@ class QueryService:
         if timeout_seconds is not None and timeout_seconds <= 0:
             raise ConfigError("timeout_seconds must be greater than zero.")
         return min(timeout_seconds or Config.GLOBAL_TIMEOUT_SECONDS, Config.GLOBAL_TIMEOUT_SECONDS)
+
+    def _execution_database(self, database: str | None) -> str:
+        """Keep query execution bound to the database in the approved profile."""
+
+        requested = (database or "").strip()
+        configured = (Config.DATABASE or "").strip()
+        if requested and configured and requested.casefold() != configured.casefold():
+            raise ConfigError(
+                "Query execution database must match the active profile. "
+                "Configure and approve a profile switch before targeting another database."
+            )
+        return requested or configured
 
     def _begin_request(self, tool: str) -> tuple[str, object, object, float, str]:
         """Initialize correlation context, timing, and the request-received log."""
@@ -81,6 +95,7 @@ class QueryService:
         response_metadata = {
             "profile": os.getenv("DB_ACTIVE_PROFILE", "default").strip() or "default",
             "db_type": Config.DB_TYPE,
+            **runtime_metadata(),
             **(metadata or {}),
         }
         return ToolResponse(
@@ -542,6 +557,138 @@ class QueryService:
             reset_request_id(request_token)
             reset_environment(environment_token)
 
+    @staticmethod
+    def _metadata_value(column: dict, *names: str) -> object:
+        wanted = {name.casefold() for name in names}
+        for key, value in column.items():
+            if str(key).casefold() in wanted:
+                return value
+        return ""
+
+    def suggest_columns(
+        self,
+        *,
+        table: str,
+        missing_column: str,
+        database: str | None = None,
+        schema: str | None = None,
+        environment: str | None = None,
+        timeout_seconds: int | None = None,
+        limit: int = 5,
+    ) -> ToolResponse:
+        """Rank similar real columns without modifying or executing SQL."""
+
+        request_id, request_token, environment_token, start_time, requested_environment = self._begin_request(
+            "suggest_columns"
+        )
+        try:
+            normalized_table = table.strip()
+            normalized_missing = missing_column.strip()
+            if not normalized_table or not normalized_missing:
+                raise ConfigError("table and missing_column are required.")
+            if limit <= 0 or limit > 20:
+                raise ConfigError("limit must be between 1 and 20.")
+
+            target_database = self._execution_database(database)
+            payload = self.connector.describe_table(
+                database=target_database,
+                table=normalized_table,
+                schema=schema,
+                timeout_seconds=self._effective_timeout(timeout_seconds),
+            )
+            columns = payload.get("columns", [])
+            if not columns:
+                response = self._error(
+                    tool="suggest_columns",
+                    environment=Config.DB_TYPE.upper(),
+                    code=ErrorCode.VALIDATION_FAILED,
+                    message=f"Table {normalized_table!r} was not found or has no visible columns.",
+                    request_id=request_id,
+                    start_time=start_time,
+                    retryable=False,
+                    data={"database": target_database, "schema": schema or "", "table": normalized_table},
+                )
+                return self._finalize_request(
+                    response,
+                    tool="suggest_columns",
+                    environment=Config.DB_TYPE.upper(),
+                    request_id=request_id,
+                    database=target_database,
+                    schema=schema or "",
+                )
+
+            target = normalized_missing.casefold()
+            ranked: list[dict[str, object]] = []
+            for column in columns:
+                if not isinstance(column, dict):
+                    continue
+                name = str(self._metadata_value(column, "column_name", "name")).strip()
+                if not name:
+                    continue
+                candidate = name.casefold()
+                score = SequenceMatcher(None, target, candidate).ratio()
+                reason = "similar_name"
+                if target in candidate or candidate in target:
+                    score = max(score, 0.8)
+                    reason = "contains_missing_name"
+                ranked.append(
+                    {
+                        "column": name,
+                        "data_type": str(self._metadata_value(column, "data_type", "type")),
+                        "similarity": round(score, 3),
+                        "reason": reason,
+                    }
+                )
+            ranked.sort(key=lambda item: (-float(item["similarity"]), str(item["column"]).casefold()))
+            suggestions = [item for item in ranked if float(item["similarity"]) >= 0.25][:limit]
+            response = self._response(
+                tool="suggest_columns",
+                environment=Config.DB_TYPE.upper(),
+                success=True,
+                request_id=request_id,
+                start_time=start_time,
+                data={
+                    "database": target_database,
+                    "schema": payload.get("schema", schema or ""),
+                    "table": normalized_table,
+                    "missing_column": normalized_missing,
+                    "suggestions": suggestions,
+                    "sql_modified": False,
+                    "sql_executed": False,
+                    "approval_required_before_revised_sql": True,
+                },
+                metadata={"db_type": Config.DB_TYPE},
+            )
+            return self._finalize_request(
+                response,
+                tool="suggest_columns",
+                environment=Config.DB_TYPE.upper(),
+                request_id=request_id,
+                database=target_database,
+                schema=payload.get("schema", schema or ""),
+            )
+        except Exception as exc:
+            response = self._handle_connector_error(
+                tool="suggest_columns",
+                requested_environment=requested_environment,
+                request_id=request_id,
+                start_time=start_time,
+                error=exc,
+                message="Failed to suggest similar columns.",
+                retryable=False,
+            )
+            return self._finalize_request(
+                response,
+                tool="suggest_columns",
+                environment=requested_environment,
+                request_id=request_id,
+                database=database or Config.DATABASE,
+                schema=schema or "",
+            )
+        finally:
+            reset_request_id(request_token)
+            reset_environment(environment_token)
+
     def execute_query(
         self,
         sql: str = "",
@@ -558,13 +705,17 @@ class QueryService:
         request_id, request_token, environment_token, start_time, requested_environment = self._begin_request(_tool_name)
         statement = sql or query
         try:
+            normalized_sql = (sql or "").strip()
+            normalized_query = (query or "").strip()
+            if normalized_sql and normalized_query and normalized_sql != normalized_query:
+                raise ConfigError("Provide either sql or query, not two different statements.")
             if max_rows is not None and max_rows <= 0:
                 raise ConfigError("max_rows must be greater than zero.")
             # Per-request limits may reduce, but never raise, the configured cap.
             row_limit = min(max_rows or Config.GLOBAL_MAX_ROWS, Config.GLOBAL_MAX_ROWS)
             # The calling client owns command authorization. MCP still enforces
             # one structurally unambiguous statement per call.
-            valid, reason = validate_query(statement)
+            valid, reason = validate_query(statement, Config.DB_TYPE)
             if not valid:
                 response = self._error(
                     tool=_tool_name,
@@ -593,7 +744,7 @@ class QueryService:
                     query=statement,
                 )
 
-            target_database = database or Config.DATABASE
+            target_database = self._execution_database(database)
             payload = self.connector.execute_query(
                 # QueryService owns policy and response behavior; the selected
                 # connector owns dialect details and transaction semantics.
@@ -725,19 +876,19 @@ def get_query_service() -> QueryService:
     """Return the process-wide service used by stateless MCP tool wrappers."""
 
     global _QUERY_SERVICE
-    # The service is reused during normal operation and explicitly discarded
-    # by profile switching when a different connector is required.
-    if _QUERY_SERVICE is None:
-        _QUERY_SERVICE = QueryService()
-    return _QUERY_SERVICE
+    with runtime_lock:
+        # The service is reused during normal operation and explicitly discarded
+        # by profile switching when a different connector is required.
+        if _QUERY_SERVICE is None:
+            _QUERY_SERVICE = QueryService()
+        return _QUERY_SERVICE
 
 
 def reset_query_service() -> None:
     """Discard the cached connector service after a runtime profile change."""
 
-    """Close and discard the cached service after a configuration change."""
-
     global _QUERY_SERVICE
-    if _QUERY_SERVICE is not None:
-        _QUERY_SERVICE.connector.close()
-    _QUERY_SERVICE = None
+    with runtime_lock:
+        if _QUERY_SERVICE is not None:
+            _QUERY_SERVICE.connector.close()
+        _QUERY_SERVICE = None

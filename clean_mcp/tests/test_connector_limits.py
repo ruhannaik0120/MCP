@@ -4,6 +4,7 @@ from connectors.mysql.connector import MySQLConnector
 from connectors.postgresql.connector import PostgreSQLConnector
 from connectors.snowflake.connector import SnowflakeConnector
 from connectors.sqlserver.connector import SQLServerConnector
+from connectors.base import unique_column_names
 
 
 # LIMIT-based dialects must reduce explicit limits above the global ceiling.
@@ -59,3 +60,7 @@ def test_fetch_layer_enforces_cap_even_when_query_cannot_be_rewritten():
 
     assert cursor.fetchmany_size == 3
     assert len(payload["rows"]) == 3
+
+
+def test_duplicate_column_names_are_preserved_with_stable_suffixes():
+    assert unique_column_names(["id", "id", "name", "id"]) == ["id", "id_2", "name", "id_3"]
