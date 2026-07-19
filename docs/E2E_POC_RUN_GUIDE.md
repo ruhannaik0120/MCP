@@ -50,8 +50,8 @@ PowerShell -ExecutionPolicy Bypass -File .\clean_mcp\scripts\setup.ps1
 
 The setup script installs core and E2E dependencies from their separate requirements files. Run `clean_mcp\scripts\verify.ps1` for the complete offline quality gate before the first live ticket.
 
-1. The user logs in to Atlassian separately.
-2. Atlassian MCP is made available to the agent.
+1. In VS Code, run **MCP: List Servers**, start `atlassian-mcp-server`, and complete the Atlassian browser authorization with the account that can access the required Jira site.
+2. Confirm the Atlassian tools are available to Copilot Agent mode before starting the ticket. The shared server URL is in `.vscode/mcp.json`; credentials and OAuth tokens are never stored in the repository.
 3. The database profiles needed for the validation are configured through the approved `clean_mcp` configuration process. Credentials are not placed in prompts or run artifacts.
 4. The agent reads `00_BASIC_INSTRUCTIONS.md` before taking any workflow action.
 5. The user provides the Jira ticket key, for example `ABC-123`.

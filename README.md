@@ -8,7 +8,7 @@ Read [00_BASIC_INSTRUCTIONS.md](00_BASIC_INSTRUCTIONS.md) first. It defines the 
 
 Do not start the E2E workflow by editing `clean_mcp/`. It is the existing generic database execution server; the E2E orchestration instructions, helper scripts, and generated run artifacts remain outside it.
 
-Use the [E2E PoC run guide](docs/E2E_POC_RUN_GUIDE.md) for the complete step-by-step operating procedure. The [database MCP documentation](clean_mcp/README.md) separately explains the existing DB execution server and its tools.
+Use the [E2E PoC run guide](docs/E2E_POC_RUN_GUIDE.md) for the complete step-by-step operating procedure. The [project and database MCP documentation](clean_mcp/docs/prd.md) explains the complete setup, DB execution server, tools, configuration, and handoff details.
 
 The short agent starter prompt is available at `instructions/start_e2e_prompt.txt`. Non-secret workflow policy and artifact defaults are documented in `poc_run_config.json`; credentials never belong there.
 
@@ -53,7 +53,7 @@ Export the saved `execution_result.json` after the approved workflow has complet
 
 `clean_mcp/` is the working generic database MCP server. It provides named database profiles, connection and metadata operations, approved query execution, structured results, and database-specific connectors. It stays independent of Jira and the E2E run-artifact workflow.
 
-See the [database MCP documentation](clean_mcp/README.md) for its tools, configuration, supported databases, and verification steps.
+See the [project and database MCP documentation](clean_mcp/docs/prd.md) for its tools, configuration, supported databases, verification steps, and complete setup instructions.
 
 ### External E2E Workflow Layer
 
