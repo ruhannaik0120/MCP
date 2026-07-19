@@ -78,28 +78,35 @@ _RESERVED_CONNECTION_OPTION_KEYS = frozenset(
 )
 
 
+# region Function: Normalize text
 def _normalize_text(value: str | None, default: str = "") -> str:
     """Trim an optional string and substitute a default for blank values."""
 
     if value is None:
         return default
     return value.strip() or default
+# endregion Function: Normalize text
 
 
+# region Function: Has placeholder delimiters
 def has_placeholder_delimiters(value: str) -> bool:
     """Return true when a value still looks like a documented placeholder."""
 
     stripped = value.strip()
     return len(stripped) >= 2 and stripped[0] == "<" and stripped[-1] == ">"
+# endregion Function: Has placeholder delimiters
 
 
+# region Function: Has wrapping quotes
 def has_wrapping_quotes(value: str) -> bool:
     """Return true when a value includes literal shell/documentation quotes."""
 
     stripped = value.strip()
     return len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {"'", '"'}
+# endregion Function: Has wrapping quotes
 
 
+# region Function: Snowflake account format valid
 def snowflake_account_format_valid(value: str) -> bool:
     """Validate connector-style account names and locator/region identifiers."""
 
@@ -107,8 +114,10 @@ def snowflake_account_format_valid(value: str) -> bool:
     if not normalized or ".snowflakecomputing.com" in normalized.lower():
         return False
     return bool(re.fullmatch(r"[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*", normalized))
+# endregion Function: Snowflake account format valid
 
 
+# region Function: As int
 def _as_int(value: str | None, default: int) -> int:
     """Parse an integer environment value with a clear configuration error."""
 
@@ -118,8 +127,10 @@ def _as_int(value: str | None, default: int) -> int:
         return int(value)
     except ValueError as exc:
         raise ConfigError(f"Expected an integer value, got: {value!r}") from exc
+# endregion Function: As int
 
 
+# region Function: As dict
 def _as_dict(value: str | None) -> dict[str, object]:
     """Parse JSON connection options and require an object-shaped value."""
 
@@ -132,19 +143,25 @@ def _as_dict(value: str | None) -> dict[str, object]:
     if not isinstance(parsed, dict):
         raise ConfigError("DB_CONNECTION_OPTIONS must decode to a JSON object.")
     return parsed
+# endregion Function: As dict
 
 
+# region Function: Normalized option key
 def _normalized_option_key(key: object) -> str:
     """Normalize driver option names for security comparisons."""
 
     return re.sub(r"[^a-z0-9]", "", str(key).lower())
+# endregion Function: Normalized option key
 
 
+# region Function: Is sensitive option key
 def _is_sensitive_option_key(key: object) -> bool:
     normalized_key = _normalized_option_key(key)
     return any(part in normalized_key for part in _SENSITIVE_OPTION_KEY_PARTS)
+# endregion Function: Is sensitive option key
 
 
+# region Function: Redact option value
 def _redact_option_value(value: object, key: object = "") -> object:
     if _is_sensitive_option_key(key):
         return "[REDACTED]"
@@ -155,16 +172,20 @@ def _redact_option_value(value: object, key: object = "") -> object:
     if isinstance(value, tuple):
         return [_redact_option_value(item) for item in value]
     return value
+# endregion Function: Redact option value
 
 
+# region Function: Redact connection options
 def _redact_connection_options(options: dict[str, object]) -> dict[str, object]:
     """Recursively copy connection options while replacing secret values."""
 
     # Diagnostics may be shown to an AI client, so secret-like option values
     # are replaced before configuration leaves the process boundary.
     return {str(key): _redact_option_value(value, key) for key, value in options.items()}
+# endregion Function: Redact connection options
 
 
+# region Function: Secret option values
 def _secret_option_values(value: object, key: object = "") -> list[str]:
     """Collect configured secret values so exception text can be scrubbed."""
 
@@ -181,12 +202,16 @@ def _secret_option_values(value: object, key: object = "") -> list[str]:
             secrets.extend(_secret_option_values(item))
         return secrets
     return []
+# endregion Function: Secret option values
 
 
+# region Class: ConfigError
 class ConfigError(ValueError):
     """Raised when runtime configuration fails validation."""
+# endregion Class: ConfigError
 
 
+# region Class: ConnectionConfig
 @dataclass(frozen=True, slots=True)
 class ConnectionConfig:
     """Resolved generic connection settings for the active database."""
@@ -200,6 +225,7 @@ class ConnectionConfig:
     timeout_seconds: int = 30
     max_rows: int = 500
 
+    # region Function: Safe dict
     def safe_dict(self) -> dict[str, object]:
         """Return this connection profile in a form safe for agent responses."""
 
@@ -213,8 +239,11 @@ class ConnectionConfig:
             "timeout_seconds": self.timeout_seconds,
             "max_rows": self.max_rows,
         }
+    # endregion Function: Safe dict
+# endregion Class: ConnectionConfig
 
 
+# region Class: Config
 class Config:
     """Central configuration surface for the MCP server."""
 
@@ -228,6 +257,7 @@ class Config:
     GLOBAL_TIMEOUT_SECONDS: ClassVar[int] = 30
     LOG_LEVEL: ClassVar[str] = "INFO"
 
+    # region Function: Reload dotenv
     @classmethod
     def reload_dotenv(cls, *, override: bool = True) -> "Config":
         """Replace recognized runtime settings from the local .env file."""
@@ -245,7 +275,9 @@ class Config:
             if value is not None and (override or key not in os.environ):
                 os.environ[key] = value
         return cls.load()
+    # endregion Function: Reload dotenv
 
+    # region Function: Load
     @classmethod
     def load(cls) -> "Config":
         """Refresh process-wide settings from environment variables."""
@@ -262,7 +294,9 @@ class Config:
         cls.GLOBAL_TIMEOUT_SECONDS = _as_int(os.getenv("DB_TIMEOUT_SECONDS"), 30)
         cls.LOG_LEVEL = _normalize_text(os.getenv("LOG_LEVEL"), "INFO").upper()
         return cls
+    # endregion Function: Load
 
+    # region Function: Validate
     @classmethod
     def validate(cls) -> "Config":
         """Load settings and reject all detected configuration problems."""
@@ -302,7 +336,9 @@ class Config:
             raise ConfigError("Configuration validation failed: " + " ".join(errors))
 
         return cls
+    # endregion Function: Validate
 
+    # region Function: Validate connection options
     @classmethod
     def _validate_connection_options(cls) -> list[str]:
         """Validate generic options shared across connector implementations."""
@@ -326,7 +362,9 @@ class Config:
             except (TypeError, ValueError):
                 errors.append("DB_CONNECTION_OPTIONS.port must be an integer.")
         return errors
+    # endregion Function: Validate connection options
 
+    # region Function: Validate connector requirements
     @classmethod
     def _validate_connector_requirements(cls) -> list[str]:
         """Apply only the required fields that vary by selected backend."""
@@ -345,7 +383,9 @@ class Config:
         if cls.DB_TYPE == "demo" and not cls.DATABASE:
             cls.DATABASE = "qa_demo"
         return errors
+    # endregion Function: Validate connector requirements
 
+    # region Function: Connection config
     @classmethod
     def connection_config(cls) -> ConnectionConfig:
         """Build the neutral configuration object consumed by connectors."""
@@ -364,7 +404,9 @@ class Config:
             timeout_seconds=cls.GLOBAL_TIMEOUT_SECONDS,
             max_rows=cls.GLOBAL_MAX_ROWS,
         )
+    # endregion Function: Connection config
 
+    # region Function: As dict
     @classmethod
     def as_dict(cls) -> dict[str, object]:
         """Return redacted effective settings for internal structured output."""
@@ -383,7 +425,9 @@ class Config:
             "global_timeout_seconds": cls.GLOBAL_TIMEOUT_SECONDS,
             "log_level": cls.LOG_LEVEL,
         }
+    # endregion Function: As dict
 
+    # region Function: Diagnostics
     @classmethod
     def diagnostics(cls) -> dict[str, object]:
         """Return troubleshooting metadata without returning credential values."""
@@ -405,7 +449,9 @@ class Config:
             ),
             "supported_connectors": sorted(SUPPORTED_CONNECTORS),
         }
+    # endregion Function: Diagnostics
 
+    # region Function: Redact text
     @classmethod
     def redact_text(cls, value: object) -> str:
         """Remove configured credential values from an external error message."""
@@ -423,6 +469,8 @@ class Config:
         )
         text = re.sub(r"(?i)([a-z][a-z0-9+.-]*://)[^/@\s:]+:[^/@\s]+@", r"\1[REDACTED]@", text)
         return text
+    # endregion Function: Redact text
+# endregion Class: Config
 
 
 # Load defaults at import time; startup validation still performs the strict gate.

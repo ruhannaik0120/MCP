@@ -16,9 +16,11 @@ from services.runtime_state import runtime_lock, runtime_metadata
 from validation.sql_guard import validate_query
 
 
+# region Class: QueryService
 class QueryService:
     """Service layer that orchestrates tool requests and formats responses."""
 
+    # region Function: Init
     def __init__(self, sql_connector=None):
         """Create the service with a selected connector or an injected test double."""
 
@@ -27,19 +29,25 @@ class QueryService:
             self.connector = ConnectorFactory.create()
         else:
             self.connector = sql_connector
+    # endregion Function: Init
 
+    # region Function: Request id
     def _request_id(self) -> str:
         """Generate the short correlation ID shared by responses and logs."""
 
         return uuid4().hex[:12]
+    # endregion Function: Request id
 
+    # region Function: Effective timeout
     def _effective_timeout(self, timeout_seconds: int | None) -> int:
         """Return a positive timeout that cannot exceed the configured ceiling."""
 
         if timeout_seconds is not None and timeout_seconds <= 0:
             raise ConfigError("timeout_seconds must be greater than zero.")
         return min(timeout_seconds or Config.GLOBAL_TIMEOUT_SECONDS, Config.GLOBAL_TIMEOUT_SECONDS)
+    # endregion Function: Effective timeout
 
+    # region Function: Execution database
     def _execution_database(self, database: str | None) -> str:
         """Keep query execution bound to the database in the approved profile."""
 
@@ -51,7 +59,9 @@ class QueryService:
                 "Configure and approve a profile switch before targeting another database."
             )
         return requested or configured
+    # endregion Function: Execution database
 
+    # region Function: Begin request
     def _begin_request(self, tool: str) -> tuple[str, object, object, float, str]:
         """Initialize correlation context, timing, and the request-received log."""
 
@@ -74,7 +84,9 @@ class QueryService:
             },
         )
         return request_id, request_token, environment_token, start_time, environment_name
+    # endregion Function: Begin request
 
+    # region Function: Response
     def _response(
         self,
         *,
@@ -108,7 +120,9 @@ class QueryService:
             metadata=response_metadata,
             error=error,
         )
+    # endregion Function: Response
 
+    # region Function: Error
     def _error(
         self,
         *,
@@ -146,7 +160,9 @@ class QueryService:
                 context=context or {},
             ),
         )
+    # endregion Function: Error
 
+    # region Function: End request
     def _end_request(self, tool: str, environment: str, request_id: str, response: ToolResponse) -> None:
         """Write the final correlated success or failure log entry."""
 
@@ -165,7 +181,9 @@ class QueryService:
                 "error_code": getattr(response.error, "code", None) if response.error else None,
             },
         )
+    # endregion Function: End request
 
+    # region Function: Finalize request
     def _finalize_request(
         self,
         response: ToolResponse,
@@ -180,7 +198,9 @@ class QueryService:
 
         self._end_request(tool, environment, request_id, response)
         return response
+    # endregion Function: Finalize request
 
+    # region Function: Handle connector error
     def _handle_connector_error(
         self,
         *,
@@ -214,7 +234,9 @@ class QueryService:
             retryable=retryable,
             data=data,
         )
+    # endregion Function: Handle connector error
 
+    # region Function: Test connection
     def test_connection(
         self,
         environment: str | None = None,
@@ -278,7 +300,9 @@ class QueryService:
         finally:
             reset_request_id(request_token)
             reset_environment(environment_token)
+    # endregion Function: Test connection
 
+    # region Function: Health
     def health(
         self,
         environment: str | None = None,
@@ -345,7 +369,9 @@ class QueryService:
         finally:
             reset_request_id(request_token)
             reset_environment(environment_token)
+    # endregion Function: Health
 
+    # region Function: List databases
     def list_databases(
         self,
         environment: str | None = None,
@@ -399,7 +425,9 @@ class QueryService:
         finally:
             reset_request_id(request_token)
             reset_environment(environment_token)
+    # endregion Function: List databases
 
+    # region Function: List tables
     def list_tables(
         self,
         database: str | None = None,
@@ -462,7 +490,9 @@ class QueryService:
         finally:
             reset_request_id(request_token)
             reset_environment(environment_token)
+    # endregion Function: List tables
 
+    # region Function: Describe table
     def describe_table(
         self,
         database: str | None = None,
@@ -556,7 +586,9 @@ class QueryService:
         finally:
             reset_request_id(request_token)
             reset_environment(environment_token)
+    # endregion Function: Describe table
 
+    # region Function: Metadata value
     @staticmethod
     def _metadata_value(column: dict, *names: str) -> object:
         wanted = {name.casefold() for name in names}
@@ -564,7 +596,9 @@ class QueryService:
             if str(key).casefold() in wanted:
                 return value
         return ""
+    # endregion Function: Metadata value
 
+    # region Function: Suggest columns
     def suggest_columns(
         self,
         *,
@@ -688,7 +722,9 @@ class QueryService:
         finally:
             reset_request_id(request_token)
             reset_environment(environment_token)
+    # endregion Function: Suggest columns
 
+    # region Function: Execute query
     def execute_query(
         self,
         sql: str = "",
@@ -814,12 +850,16 @@ class QueryService:
         finally:
             reset_request_id(request_token)
             reset_environment(environment_token)
+    # endregion Function: Execute query
 
+    # region Function: Execute select query
     def execute_select_query(self, **kwargs) -> ToolResponse:
         """Deprecated compatibility alias for the generic execution path."""
 
         return self.execute_query(_tool_name="execute_select_query", **kwargs)
+    # endregion Function: Execute select query
 
+    # region Function: Config diagnostics
     def config_diagnostics(self) -> ToolResponse:
         """Return agent-safe configuration diagnostics through the standard envelope."""
 
@@ -867,11 +907,14 @@ class QueryService:
         finally:
             reset_request_id(request_token)
             reset_environment(environment_token)
+    # endregion Function: Config diagnostics
+# endregion Class: QueryService
 
 
 _QUERY_SERVICE: QueryService | None = None
 
 
+# region Function: Get query service
 def get_query_service() -> QueryService:
     """Return the process-wide service used by stateless MCP tool wrappers."""
 
@@ -882,8 +925,10 @@ def get_query_service() -> QueryService:
         if _QUERY_SERVICE is None:
             _QUERY_SERVICE = QueryService()
         return _QUERY_SERVICE
+# endregion Function: Get query service
 
 
+# region Function: Reset query service
 def reset_query_service() -> None:
     """Discard the cached connector service after a runtime profile change."""
 
@@ -892,3 +937,4 @@ def reset_query_service() -> None:
         if _QUERY_SERVICE is not None:
             _QUERY_SERVICE.connector.close()
         _QUERY_SERVICE = None
+# endregion Function: Reset query service

@@ -47,6 +47,7 @@ _STATEMENT_STARTS = frozenset(
     }
 )
 
+# region Function: Strip quoted content
 def _strip_quoted_content(sql: str) -> str:
     """Replace literals and quoted identifiers before structural scanning."""
 
@@ -60,14 +61,18 @@ def _strip_quoted_content(sql: str) -> str:
     for pattern in patterns:
         stripped = re.sub(pattern, "''", stripped)
     return stripped
+# endregion Function: Strip quoted content
 
 
+# region Function: Normalize query
 def normalize_query(sql: str) -> str:
     """Normalize whitespace and trailing delimiters for validation."""
 
     return sql.strip().rstrip(";").strip()
+# endregion Function: Normalize query
 
 
+# region Function: Top level words
 def _top_level_words(sql: str) -> list[tuple[str, int, int]]:
     """Tokenize words outside parentheses after quoted content is removed."""
 
@@ -82,8 +87,10 @@ def _top_level_words(sql: str) -> list[tuple[str, int, int]]:
         elif depth == 0:
             words.append((token.upper(), match.start(), match.end()))
     return words
+# endregion Function: Top level words
 
 
+# region Function: Has adjacent tsql statement
 def _has_adjacent_tsql_statement(sql: str) -> bool:
     """Detect a second top-level T-SQL command without misreading common clauses."""
 
@@ -132,8 +139,10 @@ def _has_adjacent_tsql_statement(sql: str) -> bool:
             continue
         return True
     return False
+# endregion Function: Has adjacent tsql statement
 
 
+# region Function: Validate query
 def validate_query(sql: str, db_type: str = "") -> tuple[bool, str]:
     """Validate that an approved request contains one unambiguous statement."""
 
@@ -167,3 +176,4 @@ def validate_query(sql: str, db_type: str = "") -> tuple[bool, str]:
             return False, "Query blocked - multiple statements are not permitted."
 
     return True, ""
+# endregion Function: Validate query

@@ -15,15 +15,19 @@ SUPPORTED_CONNECTORS: dict[str, str] = {
 }
 
 
+# region Class: ConnectorFactory
 class ConnectorFactory:
     """Instantiate the appropriate connector based on configuration."""
 
+    # region Function: Supported connectors
     @staticmethod
     def supported_connectors() -> tuple[str, ...]:
         """Return registered connector names in deterministic display order."""
 
         return tuple(sorted(SUPPORTED_CONNECTORS))
+    # endregion Function: Supported connectors
 
+    # region Function: Create
     @staticmethod
     def create(connector_type: str | None = None) -> DatabaseConnector:
         """Build the requested connector, falling back to runtime configuration."""
@@ -57,3 +61,5 @@ class ConnectorFactory:
             )
 
         return connector_class()
+    # endregion Function: Create
+# endregion Class: ConnectorFactory

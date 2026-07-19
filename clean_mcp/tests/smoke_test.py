@@ -17,6 +17,7 @@ from config import Config, ConfigError
 from connectors.factory import ConnectorFactory
 
 
+# region Function: Main
 def main() -> int:
     """Validate startup and one optional connector round trip."""
 
@@ -45,14 +46,17 @@ def main() -> int:
     except Exception as exc:
         print(f"Smoke test failed: {exc}")
         return 2
+# endregion Function: Main
 
 
+# region Function: Should attempt connection
 def _should_attempt_connection() -> bool:
     """Attempt a live check only when required connection settings exist."""
 
     import os
 
     return os.getenv("DB_SMOKE_TEST_CONNECT", "false").strip().lower() in {"1", "true", "yes", "y", "on"}
+# endregion Function: Should attempt connection
 
 
 if __name__ == "__main__":

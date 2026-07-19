@@ -8,6 +8,7 @@ from services import query_service
 from services.runtime_state import runtime_lock
 
 
+# region Function: Test connection
 def test_connection(
     environment: str = "",
     database: str = "",
@@ -30,10 +31,13 @@ def test_connection(
             database=database,
             timeout_seconds=timeout_seconds,
         ).to_dict()
+# endregion Function: Test connection
 
 
+# region Function: Health
 def health(environment: str = "", timeout_seconds: int | None = None) -> dict:
     """Return a diagnostic health summary for the active connector."""
 
     with runtime_lock:
         return query_service.health(environment=environment, timeout_seconds=timeout_seconds).to_dict()
+# endregion Function: Health

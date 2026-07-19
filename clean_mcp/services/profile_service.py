@@ -31,6 +31,7 @@ _PROFILE_ENV_KEYS = {
 _active_profile = os.getenv("DB_ACTIVE_PROFILE", "default").strip() or "default"
 
 
+# region Function: Profiles
 def _profiles() -> dict[str, dict[str, Any]]:
     """Parse named profiles from JSON without exposing them outside this module."""
 
@@ -51,8 +52,10 @@ def _profiles() -> dict[str, dict[str, Any]]:
             raise ConfigError("Every connection profile must have a name and JSON object value.")
         profiles[normalized_name] = value
     return profiles
+# endregion Function: Profiles
 
 
+# region Function: Safe profile
 def _safe_profile(name: str, profile: dict[str, Any]) -> dict[str, Any]:
     """Convert a profile into agent-safe metadata with no credential values."""
 
@@ -78,8 +81,10 @@ def _safe_profile(name: str, profile: dict[str, Any]) -> dict[str, Any]:
         "issues": issues,
         "active": name == _active_profile,
     }
+# endregion Function: Safe profile
 
 
+# region Function: Profile issues
 def _profile_issues(profile: dict[str, Any]) -> list[str]:
     """Return non-secret readiness issue labels for a profile."""
 
@@ -107,8 +112,10 @@ def _profile_issues(profile: dict[str, Any]) -> list[str]:
     if db_type == "sqlserver" and bool(profile.get("username")) != bool(profile.get("password")):
         issues.append("partial_credentials")
     return issues
+# endregion Function: Profile issues
 
 
+# region Function: List connection profiles
 def list_connection_profiles() -> dict[str, Any]:
     """Return non-secret metadata for configured connection profiles."""
 
@@ -121,8 +128,10 @@ def list_connection_profiles() -> dict[str, Any]:
             "supported_connectors": sorted(SUPPORTED_CONNECTORS),
             **runtime_metadata(),
         }
+# endregion Function: List connection profiles
 
 
+# region Function: Reload runtime configuration
 def reload_runtime_configuration(*, confirm: bool = False) -> dict[str, Any]:
     """Atomically reload local .env values and discard the cached connector."""
 
@@ -157,8 +166,10 @@ def reload_runtime_configuration(*, confirm: bool = False) -> dict[str, Any]:
             _active_profile = previous_profile
             Config.load()
             raise
+# endregion Function: Reload runtime configuration
 
 
+# region Function: Profile environment
 def _profile_environment(profile: dict[str, Any]) -> dict[str, str]:
     """Translate profile fields into the environment keys consumed by Config."""
 
@@ -181,8 +192,10 @@ def _profile_environment(profile: dict[str, Any]) -> dict[str, str]:
             values[env_key] = str(value)
     values["DB_TYPE"] = db_type
     return values
+# endregion Function: Profile environment
 
 
+# region Function: Switch connection profile
 def switch_connection_profile(name: str, *, confirm: bool = False, test_connection: bool = True) -> dict[str, Any]:
     """Atomically switch the process to a named profile and optionally verify it."""
 
@@ -249,3 +262,4 @@ def switch_connection_profile(name: str, *, confirm: bool = False, test_connecti
             Config.load()
             reset_query_service()
             raise
+# endregion Function: Switch connection profile

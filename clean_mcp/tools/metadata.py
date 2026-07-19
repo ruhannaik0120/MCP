@@ -8,13 +8,16 @@ from services import query_service
 from services.runtime_state import runtime_lock
 
 
+# region Function: List databases
 def list_databases(environment: str = "", timeout_seconds: int | None = None) -> dict:
     """Return all databases for the selected connector."""
 
     with runtime_lock:
         return query_service.list_databases(environment=environment, timeout_seconds=timeout_seconds).to_dict()
+# endregion Function: List databases
 
 
+# region Function: List tables
 def list_tables(
     database: str = "",
     schema: str = "",
@@ -30,8 +33,10 @@ def list_tables(
             environment=environment,
             timeout_seconds=timeout_seconds,
         ).to_dict()
+# endregion Function: List tables
 
 
+# region Function: Describe table
 def describe_table(
     database: str = "",
     table: str = "",
@@ -49,8 +54,10 @@ def describe_table(
             environment=environment,
             timeout_seconds=timeout_seconds,
         ).to_dict()
+# endregion Function: Describe table
 
 
+# region Function: Suggest columns
 def suggest_columns(
     table: str,
     missing_column: str,
@@ -72,3 +79,4 @@ def suggest_columns(
             timeout_seconds=timeout_seconds,
             limit=limit,
         ).to_dict()
+# endregion Function: Suggest columns

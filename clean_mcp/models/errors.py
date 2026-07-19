@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 
+# region Class: StructuredError
 @dataclass(slots=True)
 class StructuredError:
     """Machine-readable error payload used by all MCP tools.
@@ -30,6 +31,7 @@ class StructuredError:
     # attached to an error returned to an AI client.
     context: dict[str, Any] = field(default_factory=dict)
 
+    # region Function: To dict
     def to_dict(self) -> dict[str, Any]:
         """Serialize the error into the contract expected by MCP clients."""
 
@@ -46,8 +48,11 @@ class StructuredError:
         if self.hint is not None:
             payload["hint"] = self.hint
         return payload
+    # endregion Function: To dict
+# endregion Class: StructuredError
 
 
+# region Class: ErrorCode
 class ErrorCode:
     """Canonical error codes returned by the service layer."""
 
@@ -57,3 +62,4 @@ class ErrorCode:
     QUERY_BLOCKED = "QUERY_BLOCKED"
     DATABASE_ERROR = "DATABASE_ERROR"
     UNKNOWN_ERROR = "UNKNOWN_ERROR"
+# endregion Class: ErrorCode

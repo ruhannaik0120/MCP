@@ -39,6 +39,7 @@ _QA_PASS_STATUSES = {"passed", "pass"}
 _QA_FAIL_STATUSES = {"failed", "fail"}
 
 
+# region Function: Sanitize ticket key
 def sanitize_ticket_key(ticket_key: str) -> str:
     """Return the same safe folder name used by init_poc_run.py."""
 
@@ -55,8 +56,10 @@ def sanitize_ticket_key(ticket_key: str) -> str:
     if sanitized.split(".", 1)[0] in _WINDOWS_RESERVED_NAMES:
         sanitized = f"RUN-{sanitized[:95]}"
     return sanitized
+# endregion Function: Sanitize ticket key
 
 
+# region Function: Safe child
 def _safe_child(parent: Path, child_name: str) -> Path:
     """Return a child path only when its resolved destination stays under parent."""
 
@@ -65,8 +68,10 @@ def _safe_child(parent: Path, child_name: str) -> Path:
     if not child.resolve(strict=False).is_relative_to(resolved_parent):
         raise ValueError(f"Unsafe path outside {resolved_parent}: {child_name}")
     return child
+# endregion Function: Safe child
 
 
+# region Function: Redact sensitive
 def redact_sensitive(value: Any, key: str = "") -> Any:
     """Redact credential-like fields before placing saved data in a report."""
 
@@ -95,8 +100,10 @@ def redact_sensitive(value: Any, key: str = "") -> Any:
         )
         return redacted
     return value
+# endregion Function: Redact sensitive
 
 
+# region Function: Load execution result
 def load_execution_result(path: Path) -> dict[str, Any]:
     if not path.is_file():
         raise FileNotFoundError(f"Execution result file not found: {path}")
@@ -112,8 +119,10 @@ def load_execution_result(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("execution_result.json must contain a JSON object or a list of response objects.")
     return redact_sensitive(payload)
+# endregion Function: Load execution result
 
 
+# region Function: Nested value
 def _nested_value(item: dict[str, Any], key: str) -> Any:
     if key in item:
         return item[key]
@@ -124,8 +133,10 @@ def _nested_value(item: dict[str, Any], key: str) -> Any:
     if isinstance(result, dict) and key in result:
         return result[key]
     return None
+# endregion Function: Nested value
 
 
+# region Function: Query results
 def query_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
     for key in ("query_results", "results", "queries", "executions"):
         candidate = payload.get(key)
@@ -136,8 +147,10 @@ def query_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
     if any(key in payload for key in ("success", "rows", "row_count", "rows_affected", "error")):
         return [payload]
     return []
+# endregion Function: Query results
 
 
+# region Function: Query status
 def query_status(item: dict[str, Any]) -> str:
     validation_status = item.get("validation_status", item.get("qa_status"))
     if validation_status not in (None, ""):
@@ -151,57 +164,74 @@ def query_status(item: dict[str, Any]) -> str:
     if success is False:
         return "execution_failed"
     return "not_evaluated"
+# endregion Function: Query status
 
 
+# region Function: Returned row count
 def returned_row_count(item: dict[str, Any]) -> int | str:
     count = _nested_value(item, "row_count")
     if count is not None:
         return count
     rows = _nested_value(item, "rows")
     return len(rows) if isinstance(rows, list) else ""
+# endregion Function: Returned row count
 
 
+# region Function: Affected row count
 def affected_row_count(item: dict[str, Any]) -> int | str:
     count = _nested_value(item, "rows_affected")
     return count if count is not None else ""
+# endregion Function: Affected row count
 
 
+# region Function: Result preview
 def result_preview(item: dict[str, Any], limit: int = 10) -> Any:
     rows = _nested_value(item, "rows")
     if isinstance(rows, list):
         return rows[:limit]
     preview = _nested_value(item, "preview")
     return preview if preview is not None else []
+# endregion Function: Result preview
 
 
+# region Function: Query identifier
 def query_identifier(item: dict[str, Any], index: int) -> str:
     for key in ("check_id", "query_id", "id", "name", "check", "request_id", "tool"):
         value = item.get(key)
         if value not in (None, ""):
             return str(value)
     return f"Query {index}"
+# endregion Function: Query identifier
 
 
+# region Function: Query profile
 def query_profile(item: dict[str, Any]) -> str:
     metadata = item.get("metadata")
     if isinstance(metadata, dict) and metadata.get("profile") not in (None, ""):
         return str(metadata["profile"])
     return str(item.get("profile", ""))
+# endregion Function: Query profile
 
 
+# region Function: Expected result
 def expected_result(item: dict[str, Any]) -> str:
     value = item.get("expected", item.get("expected_result", ""))
     return str(value) if value not in (None, "") else ""
+# endregion Function: Expected result
 
 
+# region Function: Actual result
 def actual_result(item: dict[str, Any]) -> str:
     value = item.get("actual", item.get("actual_result", ""))
     return str(value) if value not in (None, "") else ""
+# endregion Function: Actual result
 
 
+# region Function: Collect errors
 def collect_errors(payload: dict[str, Any], results: list[dict[str, Any]]) -> list[dict[str, str]]:
     errors: list[dict[str, str]] = []
 
+    # region Function: Add error
     def add_error(error: Any, query: str = "Run") -> None:
         if not error:
             return
@@ -216,6 +246,7 @@ def collect_errors(payload: dict[str, Any], results: list[dict[str, Any]]) -> li
             )
         else:
             errors.append({"query": query, "code": "", "message": str(error), "detail": ""})
+    # endregion Function: Add error
 
     top_level_errors = payload.get("errors", [])
     if isinstance(top_level_errors, list):
@@ -229,8 +260,10 @@ def collect_errors(payload: dict[str, Any], results: list[dict[str, Any]]) -> li
     for index, item in enumerate(results, start=1):
         add_error(item.get("error"), query_identifier(item, index))
     return errors
+# endregion Function: Collect errors
 
 
+# region Function: Build summary
 def build_summary(payload: dict[str, Any], results: list[dict[str, Any]], errors: list[dict[str, str]]) -> dict[str, Any]:
     summary = payload.get("summary")
     safe_summary = dict(summary) if isinstance(summary, dict) else {}
@@ -261,8 +294,10 @@ def build_summary(payload: dict[str, Any], results: list[dict[str, Any]], errors
         }
     )
     return safe_summary
+# endregion Function: Build summary
 
 
+# region Function: Validate report payload
 def validate_report_payload(ticket_id: str, payload: dict[str, Any], *, require_results: bool) -> None:
     """Reject mismatched or unfinished evidence before creating a final report."""
 
@@ -275,12 +310,16 @@ def validate_report_payload(ticket_id: str, payload: dict[str, Any], *, require_
     errors = collect_errors(payload, results)
     if require_results and not results and not errors:
         raise ValueError("No execution results are available. Complete the approved query run before exporting a report.")
+# endregion Function: Validate report payload
 
 
+# region Function: Json text
 def _json_text(value: Any) -> str:
     return json.dumps(value, ensure_ascii=True, indent=2, default=str)
+# endregion Function: Json text
 
 
+# region Function: Excel cell
 def _excel_cell(value: Any) -> Any:
     """Convert untrusted report values into safe, valid Excel cell content."""
 
@@ -296,8 +335,10 @@ def _excel_cell(value: Any) -> Any:
     if text.lstrip().startswith(("=", "+", "-", "@")):
         text = "'" + text
     return text
+# endregion Function: Excel cell
 
 
+# region Function: Export html
 def export_html(ticket_id: str, payload: dict[str, Any], output_path: Path) -> None:
     payload = redact_sensitive(payload)
     results = query_results(payload)
@@ -368,8 +409,10 @@ def export_html(ticket_id: str, payload: dict[str, Any], output_path: Path) -> N
         temporary_path.replace(output_path)
     finally:
         temporary_path.unlink(missing_ok=True)
+# endregion Function: Export html
 
 
+# region Function: Load openpyxl
 def load_openpyxl() -> tuple[Any, Any]:
     try:
         from openpyxl import Workbook
@@ -380,8 +423,10 @@ def load_openpyxl() -> tuple[Any, Any]:
             ".\\.venv\\Scripts\\python.exe -m pip install -r requirements-e2e.txt"
         ) from exc
     return Workbook, Font
+# endregion Function: Load openpyxl
 
 
+# region Function: Export excel
 def export_excel(
     ticket_id: str,
     payload: dict[str, Any],
@@ -479,8 +524,10 @@ def export_excel(
         temporary_path.replace(output_path)
     finally:
         temporary_path.unlink(missing_ok=True)
+# endregion Function: Export excel
 
 
+# region Function: Main
 def main() -> int:
     parser = argparse.ArgumentParser(description="Export saved E2E PoC execution results.")
     parser.add_argument("ticket_key", help="Jira ticket key, for example ABC-123")
@@ -527,6 +574,7 @@ def main() -> int:
     except Exception as exc:
         parser.exit(1, f"Unable to write report: {redact_sensitive(str(exc))}\n")
     return 0
+# endregion Function: Main
 
 
 if __name__ == "__main__":

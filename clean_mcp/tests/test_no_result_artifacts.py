@@ -4,13 +4,18 @@ from config import Config
 from services.query_service import QueryService
 
 
+# region Class: Connector
 class _Connector:
     """Return one deterministic query result without external infrastructure."""
 
+    # region Function: Execute query
     def execute_query(self, query, *, database=None, timeout_seconds=None, max_rows=None):
         return {"columns": ["value"], "rows": [{"value": 1}], "rows_affected": 1}
+    # endregion Function: Execute query
+# endregion Class: Connector
 
 
+# region Function: Test execution does not write result artifacts
 def test_execution_does_not_write_result_artifacts(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("DB_TYPE", "demo")
@@ -21,3 +26,4 @@ def test_execution_does_not_write_result_artifacts(tmp_path, monkeypatch):
 
     assert response["success"] is True
     assert list(tmp_path.rglob("*.json")) == []
+# endregion Function: Test execution does not write result artifacts

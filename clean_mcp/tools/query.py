@@ -8,6 +8,7 @@ from services import query_service
 from services.runtime_state import runtime_lock
 
 
+# region Function: Execute query
 def execute_query(
     sql: str = "",
     query: str = "",
@@ -29,8 +30,10 @@ def execute_query(
             timeout_seconds=timeout_seconds,
             max_rows=max_rows,
         ).to_dict()
+# endregion Function: Execute query
 
 
+# region Function: Execute select query
 def execute_select_query(
     sql: str = "",
     query: str = "",
@@ -52,3 +55,4 @@ def execute_select_query(
             timeout_seconds=timeout_seconds,
             max_rows=max_rows,
         ).to_dict()
+# endregion Function: Execute select query

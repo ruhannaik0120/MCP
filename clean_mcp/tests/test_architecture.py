@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FORBIDDEN_DRIVER_MODULES = {"pyodbc", "mysql", "psycopg", "snowflake"}
 
 
+# region Function: Test database drivers are imported only by connectors
 def test_database_drivers_are_imported_only_by_connectors():
     """Prevent tools and services from bypassing connector boundaries."""
 
@@ -26,3 +27,4 @@ def test_database_drivers_are_imported_only_by_connectors():
             if modules & FORBIDDEN_DRIVER_MODULES:
                 violations.append(f"{relative}:{node.lineno}")
     assert not violations, "Database drivers imported outside connectors/: " + ", ".join(violations)
+# endregion Function: Test database drivers are imported only by connectors

@@ -18,9 +18,11 @@ _request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_i
 _environment_var: contextvars.ContextVar[str] = contextvars.ContextVar("environment", default="-")
 
 
+# region Class: RequestContextFilter
 class _RequestContextFilter(logging.Filter):
     """Populate request-scoped context on every log record."""
 
+    # region Function: Filter
     def filter(self, record: logging.LogRecord) -> bool:
         """Attach correlation fields that callers did not explicitly provide."""
 
@@ -35,11 +37,15 @@ class _RequestContextFilter(logging.Filter):
         if not hasattr(record, "execution_time_ms"):
             record.execution_time_ms = None
         return True
+    # endregion Function: Filter
+# endregion Class: RequestContextFilter
 
 
+# region Class: JsonFormatter
 class _JsonFormatter(logging.Formatter):
     """Emit machine-readable logs with the fields useful for audit trails."""
 
+    # region Function: Format
     def format(self, record: logging.LogRecord) -> str:
         """Serialize one standard LogRecord into the framework JSON schema."""
 
@@ -63,6 +69,8 @@ class _JsonFormatter(logging.Formatter):
                 payload[key] = value
 
         return json.dumps(payload, default=str)
+    # endregion Function: Format
+# endregion Class: JsonFormatter
 
 
 # A named, non-propagating logger prevents duplicate output through root handlers.
@@ -84,25 +92,33 @@ if not logger.handlers:
     logger.addHandler(console_handler)
 
 
+# region Function: Set request id
 def set_request_id(request_id: str) -> contextvars.Token[str]:
     """Bind a request ID to the current async/thread execution context."""
 
     return _request_id_var.set(request_id)
+# endregion Function: Set request id
 
 
+# region Function: Reset request id
 def reset_request_id(token: contextvars.Token[str]) -> None:
     """Restore the request context that existed before the current call."""
 
     _request_id_var.reset(token)
+# endregion Function: Reset request id
 
 
+# region Function: Set environment
 def set_environment(environment: str) -> contextvars.Token[str]:
     """Bind the active database/environment label to subsequent log records."""
 
     return _environment_var.set(environment)
+# endregion Function: Set environment
 
 
+# region Function: Reset environment
 def reset_environment(token: contextvars.Token[str]) -> None:
     """Restore the previous environment logging context."""
 
     _environment_var.reset(token)
+# endregion Function: Reset environment
