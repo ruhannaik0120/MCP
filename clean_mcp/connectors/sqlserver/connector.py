@@ -11,15 +11,19 @@ from connectors.base import DatabaseConnector, unique_column_names
 from logger import logger
 
 
+# region Class: SQLServerConnector
 class SQLServerConnector(DatabaseConnector):
     """Connector implementation for SQL Server via pyodbc."""
 
+    # region Function: Odbc value
     @staticmethod
     def _odbc_value(value: object) -> str:
         """Brace-escape an ODBC value so delimiters cannot add attributes."""
 
         return "{" + str(value).replace("}", "}}") + "}"
+    # endregion Function: Odbc value
 
+    # region Function: Driver
     def _driver(self):
         """Load pyodbc only when the SQL Server backend is selected."""
         # Lazy loading prevents an absent ODBC installation from breaking other
@@ -30,12 +34,16 @@ class SQLServerConnector(DatabaseConnector):
             raise ConfigError("Install pyodbc to use the SQL Server connector.") from exc
         pyodbc.pooling = True
         return pyodbc
+    # endregion Function: Driver
 
+    # region Function: Odbc version
     @property
     def odbc_version(self) -> str:
         """Return the installed pyodbc version for diagnostics."""
         return self._driver().version
+    # endregion Function: Odbc version
 
+    # region Function: Profile
     def _profile(self) -> ConnectionConfig:
         """Return the active profile after checking SQL Server requirements."""
         profile = Config.connection_config()
@@ -44,11 +52,15 @@ class SQLServerConnector(DatabaseConnector):
         if not profile.database:
             raise ConfigError("DB_DATABASE is required for the SQL Server connector.")
         return profile
+    # endregion Function: Profile
 
+    # region Function: Normalize database
     def _normalize_database(self, database: str | None, fallback: str) -> str:
         """Select an explicit database or the configured default."""
         return (database or fallback or "master").strip() or "master"
+    # endregion Function: Normalize database
 
+    # region Function: Connection options
     def _connection_options(self, profile: ConnectionConfig) -> str:
         """Build secure ODBC options from generic and SQL-specific settings."""
         options = dict(profile.connection_options or {})
@@ -85,11 +97,15 @@ class SQLServerConnector(DatabaseConnector):
             rendered_value = "yes" if value is True else "no" if value is False else value
             parts.append(f"{key}={self._odbc_value(rendered_value)}")
         return ";".join(parts) + ";"
+    # endregion Function: Connection options
 
+    # region Function: Build connection string
     def _build_connection_string(self, profile: ConnectionConfig, database: str) -> str:
         """Compose the complete ODBC connection string for one database."""
         return self._connection_options(profile) + f"DATABASE={self._odbc_value(database)};"
+    # endregion Function: Build connection string
 
+    # region Function: Row limit sql
     def _row_limit_sql(self, sql: str, max_rows: int) -> str:
         """Apply SQL Server TOP limits to eligible row-returning statements."""
         normalized_sql = sql.strip()
@@ -116,7 +132,9 @@ class SQLServerConnector(DatabaseConnector):
             return f"SELECT {distinct}TOP {max_rows} {remainder}"
 
         return normalized_sql
+    # endregion Function: Row limit sql
 
+    # region Function: Connect
     def connect(self, database: str | None = None, timeout_seconds: int | None = None) -> Any:
         """Open an ODBC connection using the active profile and timeout."""
         profile = self._profile()
@@ -161,7 +179,9 @@ class SQLServerConnector(DatabaseConnector):
                 },
             )
             raise
+    # endregion Function: Connect
 
+    # region Function: Connection
     @contextlib.contextmanager
     def _connection(self, database: str | None = None, timeout_seconds: int | None = None):
         """Yield an operation-scoped ODBC connection and always close it."""
@@ -182,14 +202,18 @@ class SQLServerConnector(DatabaseConnector):
                     "success": True,
                 },
             )
+    # endregion Function: Connection
 
+    # region Function: Fetch rows
     def _fetch_rows(self, cursor, max_rows: int | None = None) -> dict[str, Any]:
         """Convert ODBC rows into JSON-ready dictionaries by column name."""
         columns = unique_column_names([column[0] for column in cursor.description]) if cursor.description else []
         raw_rows = cursor.fetchmany(max_rows) if columns and max_rows and hasattr(cursor, "fetchmany") else cursor.fetchall() if columns else []
         rows = [dict(zip(columns, row)) for row in raw_rows[:max_rows] if columns] if max_rows else [dict(zip(columns, row)) for row in raw_rows]
         return {"columns": columns, "rows": rows}
+    # endregion Function: Fetch rows
 
+    # region Function: Test connection
     def test_connection(self, database: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
         """Verify connectivity and return safe SQL Server metadata."""
         profile = self._profile()
@@ -214,7 +238,9 @@ class SQLServerConnector(DatabaseConnector):
             "server_information": snapshot["rows"][0] if snapshot["rows"] else {},
             "driver_version": self.odbc_version,
         }
+    # endregion Function: Test connection
 
+    # region Function: Health check
     def health_check(self, database: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
         """Return SQL Server liveness information through the common contract."""
         profile = self._profile()
@@ -223,7 +249,9 @@ class SQLServerConnector(DatabaseConnector):
         snapshot["environment"] = profile.db_type
         snapshot["database"] = target_database
         return snapshot
+    # endregion Function: Health check
 
+    # region Function: List databases
     def list_databases(self, timeout_seconds: int | None = None) -> dict[str, Any]:
         """List online databases visible to the active SQL Server login."""
         profile = self._profile()
@@ -248,7 +276,9 @@ class SQLServerConnector(DatabaseConnector):
             "count": len(payload["rows"]),
             "databases": payload["rows"],
         }
+    # endregion Function: List databases
 
+    # region Function: List tables
     def list_tables(
         self,
         database: str | None = None,
@@ -284,7 +314,9 @@ class SQLServerConnector(DatabaseConnector):
             "count": len(payload["rows"]),
             "tables": payload["rows"],
         }
+    # endregion Function: List tables
 
+    # region Function: Describe table
     def describe_table(
         self,
         database: str | None = None,
@@ -328,7 +360,9 @@ class SQLServerConnector(DatabaseConnector):
             "column_count": len(payload["rows"]),
             "columns": payload["rows"],
         }
+    # endregion Function: Describe table
 
+    # region Function: Execute query
     def execute_query(
         self,
         query: str,
@@ -355,10 +389,14 @@ class SQLServerConnector(DatabaseConnector):
             "rows": payload["rows"],
             "rows_affected": rows_affected,
         }
+    # endregion Function: Execute query
 
+    # region Function: Close
     def close(self) -> None:
         """Satisfy the connector contract; connections are already per-call."""
         return None
+    # endregion Function: Close
+# endregion Class: SQLServerConnector
 
 
 Connector = SQLServerConnector

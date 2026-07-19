@@ -22,6 +22,7 @@ _WINDOWS_RESERVED_NAMES = {
 }
 
 
+# region Function: Sanitize ticket key
 def sanitize_ticket_key(ticket_key: str) -> str:
     """Return a deterministic folder name without merging unsafe ticket keys."""
 
@@ -38,8 +39,10 @@ def sanitize_ticket_key(ticket_key: str) -> str:
     if sanitized.split(".", 1)[0] in _WINDOWS_RESERVED_NAMES:
         sanitized = f"RUN-{sanitized[:95]}"
     return sanitized
+# endregion Function: Sanitize ticket key
 
 
+# region Function: Safe run folder
 def _safe_run_folder(artifact_root: Path, ticket_id: str) -> Path:
     """Resolve a run path and reject links that redirect outside the artifact root."""
 
@@ -49,8 +52,10 @@ def _safe_run_folder(artifact_root: Path, ticket_id: str) -> Path:
     if not resolved_run_folder.is_relative_to(root):
         raise ValueError("The run folder must remain inside the configured artifact root.")
     return run_folder
+# endregion Function: Safe run folder
 
 
+# region Function: Initial files
 def _initial_files(ticket_id: str) -> dict[str, str]:
     created_at = datetime.now(timezone.utc).isoformat()
     empty_result = {
@@ -100,8 +105,10 @@ def _initial_files(ticket_id: str) -> dict[str, str]:
         ),
         "execution_result.json": json.dumps(empty_result, indent=2) + "\n",
     }
+# endregion Function: Initial files
 
 
+# region Function: Initialize run
 def initialize_run(ticket_key: str, artifact_root: Path | None = None) -> tuple[Path, list[Path]]:
     """Create missing run artifacts without changing files that already exist."""
 
@@ -122,8 +129,10 @@ def initialize_run(ticket_key: str, artifact_root: Path | None = None) -> tuple[
         created.append(path)
 
     return run_folder, created
+# endregion Function: Initialize run
 
 
+# region Function: Main
 def main() -> int:
     parser = argparse.ArgumentParser(description="Initialize an E2E PoC run folder.")
     parser.add_argument("ticket_key", help="Jira ticket key, for example ABC-123")
@@ -142,6 +151,7 @@ def main() -> int:
     else:
         print("All run files already exist; no existing files were changed.")
     return 0
+# endregion Function: Main
 
 
 if __name__ == "__main__":

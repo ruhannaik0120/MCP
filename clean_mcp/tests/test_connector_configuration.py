@@ -11,6 +11,7 @@ from connectors.snowflake.connector import SnowflakeConnector
 
 
 # Build profiles consistently so assertions focus on driver argument mapping.
+# region Function: Configure
 def _configure(monkeypatch, db_type: str, options: str = "{}") -> None:
     monkeypatch.setenv("DB_TYPE", db_type)
     monkeypatch.setenv("DB_HOST", "db.example.test")
@@ -21,9 +22,11 @@ def _configure(monkeypatch, db_type: str, options: str = "{}") -> None:
     monkeypatch.setenv("DB_TIMEOUT_SECONDS", "12")
     monkeypatch.setenv("DB_MAX_ROWS", "100")
     Config.load()
+# endregion Function: Configure
 
 
 # Each backend receives the expected driver keywords, defaults, and options.
+# region Function: Test mysql connection arguments
 def test_mysql_connection_arguments(monkeypatch):
     _configure(monkeypatch, "mysql", '{"port":3307,"ssl_disabled":true}')
 
@@ -40,8 +43,10 @@ def test_mysql_connection_arguments(monkeypatch):
         "database": "qa_demo",
         "ssl_disabled": True,
     }
+# endregion Function: Test mysql connection arguments
 
 
+# region Function: Test postgresql connection arguments
 def test_postgresql_connection_arguments(monkeypatch):
     _configure(monkeypatch, "postgresql", '{"port":5433,"sslmode":"require"}')
 
@@ -57,8 +62,10 @@ def test_postgresql_connection_arguments(monkeypatch):
         "options": "-c statement_timeout=12000",
         "sslmode": "require",
     }
+# endregion Function: Test postgresql connection arguments
 
 
+# region Function: Test snowflake connection arguments
 def test_snowflake_connection_arguments(monkeypatch):
     _configure(
         monkeypatch,
@@ -78,36 +85,52 @@ def test_snowflake_connection_arguments(monkeypatch):
         "warehouse": "COMPUTE_WH",
         "role": "QA_ROLE",
     }
+# endregion Function: Test snowflake connection arguments
 
 
 # Transaction doubles prove commit behavior without touching live databases.
+# region Class: WriteCursor
 class _WriteCursor:
     """Represent a write cursor with a deterministic affected-row count."""
     description = None
     rowcount = 2
 
+    # region Function: Execute
     def execute(self, query, *args, **kwargs):
         self.query = query
         self.execute_args = args
         self.execute_kwargs = kwargs
+    # endregion Function: Execute
 
+    # region Function: Close
     def close(self):
         return None
+    # endregion Function: Close
+# endregion Class: WriteCursor
 
 
+# region Class: WriteConnection
 class _WriteConnection:
     """Record whether a transactional connector commits an accepted write."""
+    # region Function: Init
     def __init__(self):
         self.cursor_object = _WriteCursor()
         self.committed = False
+    # endregion Function: Init
 
+    # region Function: Cursor
     def cursor(self):
         return self.cursor_object
+    # endregion Function: Cursor
 
+    # region Function: Commit
     def commit(self):
         self.committed = True
+    # endregion Function: Commit
+# endregion Class: WriteConnection
 
 
+# region Function: Test transactional connectors commit writes
 @pytest.mark.parametrize(
     ("db_type", "connector_class"),
     [
@@ -122,9 +145,11 @@ def test_transactional_connectors_commit_writes(monkeypatch, db_type, connector_
     connector = connector_class()
     connection = _WriteConnection()
 
+    # region Function: Fake connection
     @contextmanager
     def fake_connection(*args, **kwargs):
         yield connection
+    # endregion Function: Fake connection
 
     monkeypatch.setattr(connector, "_connection", fake_connection)
 
@@ -134,8 +159,10 @@ def test_transactional_connectors_commit_writes(monkeypatch, db_type, connector_
 
     assert connection.committed is True
     assert result["rows_affected"] == 2
+# endregion Function: Test transactional connectors commit writes
 
 
+# region Function: Test postgresql commits write returning rows
 def test_postgresql_commits_write_returning_rows(monkeypatch):
     _configure(monkeypatch, "postgresql")
     connector = PostgreSQLConnector()
@@ -144,9 +171,11 @@ def test_postgresql_commits_write_returning_rows(monkeypatch):
     connection.cursor_object.rowcount = 1
     connection.cursor_object.fetchmany = lambda size: [(1,)]
 
+    # region Function: Fake connection
     @contextmanager
     def fake_connection(*args, **kwargs):
         yield connection
+    # endregion Function: Fake connection
 
     monkeypatch.setattr(connector, "_connection", fake_connection)
 
@@ -154,8 +183,10 @@ def test_postgresql_commits_write_returning_rows(monkeypatch):
 
     assert connection.committed is True
     assert result["rows"] == [{"id": 1}]
+# endregion Function: Test postgresql commits write returning rows
 
 
+# region Function: Test snowflake execute passes statement timeout
 def test_snowflake_execute_passes_statement_timeout(monkeypatch):
     _configure(monkeypatch, "snowflake")
     connector = SnowflakeConnector()
@@ -165,3 +196,4 @@ def test_snowflake_execute_passes_statement_timeout(monkeypatch):
 
     assert cursor.query == "SELECT 1"
     assert cursor.execute_kwargs["timeout"] == 7
+# endregion Function: Test snowflake execute passes statement timeout

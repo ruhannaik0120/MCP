@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 
+# region Function: Unique column names
 def unique_column_names(columns: list[object]) -> list[str]:
     """Return deterministic JSON keys without dropping duplicate result columns."""
 
@@ -21,8 +22,10 @@ def unique_column_names(columns: list[object]) -> list[str]:
         used.add(candidate)
         normalized.append(candidate)
     return normalized
+# endregion Function: Unique column names
 
 
+# region Class: DatabaseConnector
 class DatabaseConnector(ABC):
     """Stable contract implemented by every database backend.
 
@@ -32,22 +35,31 @@ class DatabaseConnector(ABC):
     the shared execution, logging, response, and profile-switching code intact.
     """
 
+    # region Function: Connect
     @abstractmethod
     def connect(self, database: str | None = None, timeout_seconds: int | None = None) -> Any:
         """Open a connection to the target database."""
+    # endregion Function: Connect
 
+    # region Function: Test connection
     @abstractmethod
     def test_connection(self, database: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
         """Run a lightweight connection check and return diagnostics."""
+    # endregion Function: Test connection
 
+    # region Function: Health check
     @abstractmethod
     def health_check(self, database: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
         """Return a health/diagnostic summary for the connector."""
+    # endregion Function: Health check
 
+    # region Function: List databases
     @abstractmethod
     def list_databases(self, timeout_seconds: int | None = None) -> dict[str, Any]:
         """Return a list of available databases for the current connector."""
+    # endregion Function: List databases
 
+    # region Function: List tables
     @abstractmethod
     def list_tables(
         self,
@@ -56,7 +68,9 @@ class DatabaseConnector(ABC):
         timeout_seconds: int | None = None,
     ) -> dict[str, Any]:
         """Return the tables available in a database."""
+    # endregion Function: List tables
 
+    # region Function: Describe table
     @abstractmethod
     def describe_table(
         self,
@@ -66,7 +80,9 @@ class DatabaseConnector(ABC):
         timeout_seconds: int | None = None,
     ) -> dict[str, Any]:
         """Return column metadata for a table."""
+    # endregion Function: Describe table
 
+    # region Function: Execute query
     @abstractmethod
     def execute_query(
         self,
@@ -77,7 +93,11 @@ class DatabaseConnector(ABC):
         max_rows: int | None = None,
     ) -> Any:
         """Execute a database query and return the result payload."""
+    # endregion Function: Execute query
 
+    # region Function: Close
     @abstractmethod
     def close(self) -> None:
         """Close any open resources held by the connector."""
+    # endregion Function: Close
+# endregion Class: DatabaseConnector

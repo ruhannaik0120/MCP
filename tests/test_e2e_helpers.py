@@ -11,6 +11,7 @@ import pytest
 from scripts import export_results, init_poc_run
 
 
+# region Function: Test ticket folder names are stable and collision resistant
 def test_ticket_folder_names_are_stable_and_collision_resistant():
     assert init_poc_run.sanitize_ticket_key("abc-123") == "ABC-123"
     first = init_poc_run.sanitize_ticket_key("ABC/123")
@@ -20,8 +21,10 @@ def test_ticket_folder_names_are_stable_and_collision_resistant():
     assert first == export_results.sanitize_ticket_key("ABC/123")
     assert "/" not in first
     assert init_poc_run.sanitize_ticket_key("CON.txt").startswith("RUN-")
+# endregion Function: Test ticket folder names are stable and collision resistant
 
 
+# region Function: Test initialize run is idempotent
 def test_initialize_run_is_idempotent(tmp_path: Path):
     run_folder, created = init_poc_run.initialize_run("ABC-123", tmp_path)
     marker = run_folder / "qa_plan.md"
@@ -34,8 +37,10 @@ def test_initialize_run_is_idempotent(tmp_path: Path):
     assert marker.read_text(encoding="utf-8") == "keep this"
     payload = json.loads((run_folder / "execution_result.json").read_text(encoding="utf-8"))
     assert payload["schema_version"] == "1.0"
+# endregion Function: Test initialize run is idempotent
 
 
+# region Function: Test raw execution success is not a qa pass
 def test_raw_execution_success_is_not_a_qa_pass():
     result = {"success": True, "request_id": "req-1", "rows": [{"defect_count": 2}]}
 
@@ -44,8 +49,10 @@ def test_raw_execution_success_is_not_a_qa_pass():
     assert summary["status"] == "awaiting_evaluation"
     assert summary["passed"] == 0
     assert summary["not_evaluated"] == 1
+# endregion Function: Test raw execution success is not a qa pass
 
 
+# region Function: Test summary recomputes stale placeholder counts
 def test_summary_recomputes_stale_placeholder_counts():
     payload = {
         "summary": {"status": "not_started", "total_queries": 0, "passed": 0},
@@ -61,8 +68,10 @@ def test_summary_recomputes_stale_placeholder_counts():
     assert summary["total_queries"] == 2
     assert summary["passed"] == 1
     assert summary["failed"] == 1
+# endregion Function: Test summary recomputes stale placeholder counts
 
 
+# region Function: Test empty or wrong ticket report is rejected
 def test_empty_or_wrong_ticket_report_is_rejected():
     empty = {"ticket_id": "ABC-123", "query_results": [], "errors": []}
     with pytest.raises(ValueError, match="No execution results"):
@@ -71,8 +80,10 @@ def test_empty_or_wrong_ticket_report_is_rejected():
     wrong_ticket = {"ticket_id": "XYZ-999", "query_results": [{"success": True}]}
     with pytest.raises(ValueError, match="belongs to"):
         export_results.validate_report_payload("ABC-123", wrong_ticket, require_results=True)
+# endregion Function: Test empty or wrong ticket report is rejected
 
 
+# region Function: Test top level response list is normalized
 def test_top_level_response_list_is_normalized(tmp_path: Path):
     path = tmp_path / "execution_result.json"
     path.write_text(json.dumps([{"success": True}, {"success": False}]), encoding="utf-8")
@@ -80,8 +91,10 @@ def test_top_level_response_list_is_normalized(tmp_path: Path):
     payload = export_results.load_execution_result(path)
 
     assert len(payload["query_results"]) == 2
+# endregion Function: Test top level response list is normalized
 
 
+# region Function: Test sensitive values are redacted recursively
 def test_sensitive_values_are_redacted_recursively():
     payload = {
         "auth": {"clientSecret": "hidden"},
@@ -94,14 +107,18 @@ def test_sensitive_values_are_redacted_recursively():
     assert redacted["auth"]["clientSecret"] == "[REDACTED]"
     assert redacted["connectionString"] == "[REDACTED]"
     assert "abc.def" not in redacted["error"]
+# endregion Function: Test sensitive values are redacted recursively
 
 
+# region Function: Test excel cells block formulas and invalid control characters
 def test_excel_cells_block_formulas_and_invalid_control_characters():
     assert export_results._excel_cell("=HYPERLINK(\"https://example.test\")").startswith("'=")
     assert export_results._excel_cell("unsafe\x00value") == "unsafevalue"
     assert len(export_results._excel_cell("x" * 40_000)) <= 32_767
+# endregion Function: Test excel cells block formulas and invalid control characters
 
 
+# region Function: Test html escapes values and reports profile
 def test_html_escapes_values_and_reports_profile(tmp_path: Path):
     output = tmp_path / "report.html"
     payload = {
@@ -124,8 +141,10 @@ def test_html_escapes_values_and_reports_profile(tmp_path: Path):
     assert "&lt;unsafe&gt;" in report
     assert "qa-profile" in report
     assert "Rows Affected" in report
+# endregion Function: Test html escapes values and reports profile
 
 
+# region Function: Test excel export creates safe expected sheets
 def test_excel_export_creates_safe_expected_sheets(tmp_path: Path):
     openpyxl = pytest.importorskip("openpyxl")
     workbook_class, font_class = export_results.load_openpyxl()
@@ -156,8 +175,10 @@ def test_excel_export_creates_safe_expected_sheets(tmp_path: Path):
     finally:
         workbook.close()
     assert not list(tmp_path.glob("*.tmp.xlsx"))
+# endregion Function: Test excel export creates safe expected sheets
 
 
+# region Function: Test cli initialization and both exports work end to end
 def test_cli_initialization_and_both_exports_work_end_to_end(tmp_path: Path, monkeypatch, capsys):
     pytest.importorskip("openpyxl")
     artifact_root = tmp_path / "poc_runs"
@@ -194,3 +215,4 @@ def test_cli_initialization_and_both_exports_work_end_to_end(tmp_path: Path, mon
     assert (artifact_root / "ABC-123" / "output" / "report.html").is_file()
     assert (artifact_root / "ABC-123" / "output" / "report.xlsx").is_file()
     assert "report.xlsx" in capsys.readouterr().out
+# endregion Function: Test cli initialization and both exports work end to end

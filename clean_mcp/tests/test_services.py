@@ -5,12 +5,16 @@ from models.errors import ErrorCode
 from services.query_service import QueryService
 
 
+# region Class: FakeConnector
 class FakeConnector:
     """Record service delegation while returning deterministic connector data."""
 
+    # region Function: Init
     def __init__(self):
         self.calls = []
+    # endregion Function: Init
 
+    # region Function: Test connection
     def test_connection(self, database=None, timeout_seconds=None):
         self.calls.append(("test_connection", database, timeout_seconds))
         return {
@@ -18,7 +22,9 @@ class FakeConnector:
             "connection_status": "connected",
             "server_information": {"server_name": "server", "version": "version-string"},
         }
+    # endregion Function: Test connection
 
+    # region Function: Health check
     def health_check(self, database=None, timeout_seconds=None):
         self.calls.append(("health_check", database, timeout_seconds))
         return {
@@ -26,15 +32,21 @@ class FakeConnector:
             "connection_status": "connected",
             "server_information": {"server_name": "server", "version": "version-string"},
         }
+    # endregion Function: Health check
 
+    # region Function: List databases
     def list_databases(self, timeout_seconds=None):
         self.calls.append(("list_databases", timeout_seconds))
         return {"count": 2, "databases": [{"name": "alpha"}, {"name": "beta"}]}
+    # endregion Function: List databases
 
+    # region Function: List tables
     def list_tables(self, database=None, schema=None, timeout_seconds=None):
         self.calls.append(("list_tables", database, schema, timeout_seconds))
         return {"count": 1, "tables": [{"TABLE_SCHEMA": schema or "dbo", "TABLE_NAME": "items"}]}
+    # endregion Function: List tables
 
+    # region Function: Describe table
     def describe_table(self, database=None, table=None, schema=None, timeout_seconds=None):
         self.calls.append(("describe_table", database, table, schema, timeout_seconds))
         return {
@@ -44,15 +56,22 @@ class FakeConnector:
             "column_count": 1,
             "columns": [{"COLUMN_NAME": "name", "DATA_TYPE": "nvarchar"}],
         }
+    # endregion Function: Describe table
 
+    # region Function: Execute query
     def execute_query(self, query, *, database=None, timeout_seconds=None, max_rows=None):
         self.calls.append(("execute_query", query, database, timeout_seconds, max_rows))
         return {"columns": ["name"], "rows": [("alpha",), ("beta",)]}
+    # endregion Function: Execute query
 
+    # region Function: Close
     def close(self):
         self.calls.append(("close",))
+    # endregion Function: Close
+# endregion Class: FakeConnector
 
 
+# region Function: Configure settings
 def _configure_settings(monkeypatch):
     """Set stable policy values without loading credentials or live drivers."""
 
@@ -66,8 +85,10 @@ def _configure_settings(monkeypatch):
     monkeypatch.setenv("DB_MAX_ROWS", "25")
     monkeypatch.setenv("DB_ACTIVE_PROFILE", "sqlserver-sandbox")
     Config.load()
+# endregion Function: Configure settings
 
 
+# region Function: Test execute select query delegates to connector
 def test_execute_select_query_delegates_to_connector(monkeypatch):
     _configure_settings(monkeypatch)
     connector = FakeConnector()
@@ -82,8 +103,10 @@ def test_execute_select_query_delegates_to_connector(monkeypatch):
     assert response["metadata"]["row_limit"] == 25
     assert connector.calls[0][0] == "execute_query"
     assert connector.calls[0][1] == "SELECT name FROM sys.databases"
+# endregion Function: Test execute select query delegates to connector
 
 
+# region Function: Test health returns structured status
 def test_health_returns_structured_status(monkeypatch):
     _configure_settings(monkeypatch)
     connector = FakeConnector()
@@ -97,8 +120,10 @@ def test_health_returns_structured_status(monkeypatch):
     assert response["connection_status"] == "connected"
     assert response["server_information"]["server_name"] == "server"
     assert connector.calls[0][0] == "health_check"
+# endregion Function: Test health returns structured status
 
 
+# region Function: Test metadata calls delegate
 def test_metadata_calls_delegate(monkeypatch):
     _configure_settings(monkeypatch)
     connector = FakeConnector()
@@ -112,12 +137,16 @@ def test_metadata_calls_delegate(monkeypatch):
     assert tables["count"] == 1
     assert details["column_count"] == 1
     assert [call[0] for call in connector.calls[:3]] == ["list_databases", "list_tables", "describe_table"]
+# endregion Function: Test metadata calls delegate
 
 
+# region Function: Test suggest columns uses metadata without executing sql
 def test_suggest_columns_uses_metadata_without_executing_sql(monkeypatch):
     _configure_settings(monkeypatch)
 
+    # region Class: MetadataConnector
     class MetadataConnector(FakeConnector):
+        # region Function: Describe table
         def describe_table(self, database=None, table=None, schema=None, timeout_seconds=None):
             self.calls.append(("describe_table", database, table, schema, timeout_seconds))
             return {
@@ -130,6 +159,8 @@ def test_suggest_columns_uses_metadata_without_executing_sql(monkeypatch):
                     {"COLUMN_NAME": "created_at", "DATA_TYPE": "timestamp"},
                 ],
             }
+        # endregion Function: Describe table
+    # endregion Class: MetadataConnector
 
     connector = MetadataConnector()
     response = QueryService(connector).suggest_columns(
@@ -145,8 +176,10 @@ def test_suggest_columns_uses_metadata_without_executing_sql(monkeypatch):
     assert response["sql_executed"] is False
     assert response["approval_required_before_revised_sql"] is True
     assert [call[0] for call in connector.calls] == ["describe_table"]
+# endregion Function: Test suggest columns uses metadata without executing sql
 
 
+# region Function: Test suggest columns requires table and column
 def test_suggest_columns_requires_table_and_column(monkeypatch):
     _configure_settings(monkeypatch)
     connector = FakeConnector()
@@ -156,8 +189,10 @@ def test_suggest_columns_requires_table_and_column(monkeypatch):
     assert response["success"] is False
     assert response["error"]["code"] == ErrorCode.CONFIG_INVALID
     assert connector.calls == []
+# endregion Function: Test suggest columns requires table and column
 
 
+# region Function: Test response preserves reserved fields
 def test_response_preserves_reserved_fields(monkeypatch):
     _configure_settings(monkeypatch)
     service = QueryService(FakeConnector())
@@ -180,8 +215,10 @@ def test_response_preserves_reserved_fields(monkeypatch):
     assert response["custom"] == "value"
     assert response["metadata"]["session_isolation"] == "one_client_per_process"
     assert response["metadata"]["runtime_id"]
+# endregion Function: Test response preserves reserved fields
 
 
+# region Function: Test execute query executes approved write statement
 def test_execute_query_executes_approved_write_statement(monkeypatch):
     _configure_settings(monkeypatch)
     connector = FakeConnector()
@@ -193,8 +230,10 @@ def test_execute_query_executes_approved_write_statement(monkeypatch):
     assert response["tool"] == "execute_query"
     assert response["query"] == "DELETE FROM items"
     assert connector.calls[0][1] == "DELETE FROM items"
+# endregion Function: Test execute query executes approved write statement
 
 
+# region Function: Test execute query rejects conflicting sql arguments
 def test_execute_query_rejects_conflicting_sql_arguments(monkeypatch):
     _configure_settings(monkeypatch)
     connector = FakeConnector()
@@ -205,8 +244,10 @@ def test_execute_query_rejects_conflicting_sql_arguments(monkeypatch):
     assert response["success"] is False
     assert response["error"]["code"] == ErrorCode.CONFIG_INVALID
     assert connector.calls == []
+# endregion Function: Test execute query rejects conflicting sql arguments
 
 
+# region Function: Test execute query rejects database outside active profile
 def test_execute_query_rejects_database_outside_active_profile(monkeypatch):
     _configure_settings(monkeypatch)
     connector = FakeConnector()
@@ -218,8 +259,10 @@ def test_execute_query_rejects_database_outside_active_profile(monkeypatch):
     assert response["error"]["code"] == ErrorCode.CONFIG_INVALID
     assert "profile switch" in response["error"]["detail"]
     assert connector.calls == []
+# endregion Function: Test execute query rejects database outside active profile
 
 
+# region Function: Test deprecated alias uses same generic execution path
 def test_deprecated_alias_uses_same_generic_execution_path(monkeypatch):
     _configure_settings(monkeypatch)
     connector = FakeConnector()
@@ -230,8 +273,10 @@ def test_deprecated_alias_uses_same_generic_execution_path(monkeypatch):
     assert response["success"] is True
     assert response["tool"] == "execute_select_query"
     assert connector.calls[0][0] == "execute_query"
+# endregion Function: Test deprecated alias uses same generic execution path
 
 
+# region Function: Test request row limit cannot exceed configured cap
 def test_request_row_limit_cannot_exceed_configured_cap(monkeypatch):
     _configure_settings(monkeypatch)
     connector = FakeConnector()
@@ -243,8 +288,10 @@ def test_request_row_limit_cannot_exceed_configured_cap(monkeypatch):
     assert response["metadata"]["row_limit"] == 25
     assert response["metadata"]["profile"] == "sqlserver-sandbox"
     assert connector.calls[0][4] == 25
+# endregion Function: Test request row limit cannot exceed configured cap
 
 
+# region Function: Test non positive row limit is rejected
 def test_non_positive_row_limit_is_rejected(monkeypatch):
     _configure_settings(monkeypatch)
     service = QueryService(FakeConnector())
@@ -253,8 +300,10 @@ def test_non_positive_row_limit_is_rejected(monkeypatch):
 
     assert response["success"] is False
     assert response["error"]["code"] == ErrorCode.CONFIG_INVALID
+# endregion Function: Test non positive row limit is rejected
 
 
+# region Function: Test non positive timeout is rejected
 def test_non_positive_timeout_is_rejected(monkeypatch):
     _configure_settings(monkeypatch)
     service = QueryService(FakeConnector())
@@ -263,17 +312,24 @@ def test_non_positive_timeout_is_rejected(monkeypatch):
 
     assert response["success"] is False
     assert response["error"]["code"] == ErrorCode.CONFIG_INVALID
+# endregion Function: Test non positive timeout is rejected
 
 
+# region Function: Test connector errors redact configured password
 def test_connector_errors_redact_configured_password(monkeypatch):
     _configure_settings(monkeypatch)
 
+    # region Class: FailingConnector
     class FailingConnector(FakeConnector):
+        # region Function: Execute query
         def execute_query(self, query, **kwargs):
             raise RuntimeError("Authentication failed for password dev_pass")
+        # endregion Function: Execute query
+    # endregion Class: FailingConnector
 
     response = QueryService(FailingConnector()).execute_query(sql="SELECT 1").to_dict()
 
     assert response["success"] is False
     assert "dev_pass" not in str(response)
     assert "[REDACTED]" in response["error"]["detail"]
+# endregion Function: Test connector errors redact configured password

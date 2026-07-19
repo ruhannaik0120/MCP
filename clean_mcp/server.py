@@ -32,13 +32,16 @@ logger.info("MCP Server initialising...")
 
 
 # Profile tools expose safe profile metadata and approval-gated switching.
+# region Function: Tool list connection profiles
 @mcp.tool()
 def tool_list_connection_profiles() -> str:
     """List configured connection profiles without exposing credentials."""
 
     return json.dumps(list_profiles(), indent=2, default=str)
+# endregion Function: Tool list connection profiles
 
 
+# region Function: Tool switch connection profile
 @mcp.tool()
 def tool_switch_connection_profile(name: str, confirm: bool = False) -> str:
     """Switch connectors after explicit approval and verify the new connection.
@@ -54,8 +57,10 @@ def tool_switch_connection_profile(name: str, confirm: bool = False) -> str:
         return json.dumps({"success": True, "data": payload}, indent=2, default=str)
     except Exception as exc:
         return json.dumps({"success": False, "error": {"code": "PROFILE_SWITCH_FAILED", "message": Config.redact_text(exc)}}, indent=2)
+# endregion Function: Tool switch connection profile
 
 
+# region Function: Tool reload configuration
 @mcp.tool()
 def tool_reload_configuration(confirm: bool = False) -> str:
     """Reload local runtime configuration after explicit approval.
@@ -70,17 +75,21 @@ def tool_reload_configuration(confirm: bool = False) -> str:
         return json.dumps({"success": True, "data": payload}, indent=2, default=str)
     except Exception as exc:
         return json.dumps({"success": False, "error": {"code": "CONFIG_RELOAD_FAILED", "message": Config.redact_text(exc)}}, indent=2)
+# endregion Function: Tool reload configuration
 
 
+# region Function: Tool config diagnostics
 @mcp.tool()
 def tool_config_diagnostics() -> str:
     """Return a safe summary of the active runtime configuration."""
 
     return json.dumps(config_diagnostics(), indent=2, default=str)
+# endregion Function: Tool config diagnostics
 
 
 # Connection and metadata tools let an agent inspect the active system without
 # embedding any database-specific behavior in the MCP transport layer.
+# region Function: Tool test connection
 @mcp.tool()
 def tool_test_connection(environment: str = "", database: str = "", timeout_seconds: int | None = None) -> str:
     """Verify database connectivity and return server metadata.
@@ -95,22 +104,28 @@ def tool_test_connection(environment: str = "", database: str = "", timeout_seco
     """
 
     return json.dumps(test_connection(environment, database, timeout_seconds), indent=2, default=str)
+# endregion Function: Tool test connection
 
 
+# region Function: Tool health
 @mcp.tool()
 def tool_health(environment: str = "", timeout_seconds: int | None = None) -> str:
     """Return diagnostics for the selected database connector."""
 
     return json.dumps(health(environment, timeout_seconds), indent=2, default=str)
+# endregion Function: Tool health
 
 
+# region Function: Tool list databases
 @mcp.tool()
 def tool_list_databases(environment: str = "", timeout_seconds: int | None = None) -> str:
     """List databases for the selected connector."""
 
     return json.dumps(list_databases(environment, timeout_seconds), indent=2, default=str)
+# endregion Function: Tool list databases
 
 
+# region Function: Tool list tables
 @mcp.tool()
 def tool_list_tables(
     database: str = "",
@@ -121,8 +136,10 @@ def tool_list_tables(
     """List tables in a database, optionally filtered by schema."""
 
     return json.dumps(list_tables(database, schema, environment, timeout_seconds), indent=2, default=str)
+# endregion Function: Tool list tables
 
 
+# region Function: Tool describe table
 @mcp.tool()
 def tool_describe_table(
     database: str = "",
@@ -134,8 +151,10 @@ def tool_describe_table(
     """Return table metadata for a single table."""
 
     return json.dumps(describe_table(database, table, schema, environment, timeout_seconds), indent=2, default=str)
+# endregion Function: Tool describe table
 
 
+# region Function: Tool suggest columns
 @mcp.tool()
 def tool_suggest_columns(
     table: str,
@@ -153,8 +172,10 @@ def tool_suggest_columns(
         indent=2,
         default=str,
     )
+# endregion Function: Tool suggest columns
 
 
+# region Function: Tool execute query
 @mcp.tool()
 def tool_execute_query(
     sql: str = "",
@@ -178,8 +199,10 @@ def tool_execute_query(
         indent=2,
         default=str,
     )
+# endregion Function: Tool execute query
 
 
+# region Function: Tool execute select query
 @mcp.tool()
 def tool_execute_select_query(
     sql: str = "",
@@ -197,6 +220,7 @@ def tool_execute_select_query(
         indent=2,
         default=str,
     )
+# endregion Function: Tool execute select query
 
 
 if __name__ == "__main__":

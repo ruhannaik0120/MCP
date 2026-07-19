@@ -57,22 +57,30 @@ _DEMO_ROWS = {
 }
 
 
+# region Class: DemoConnector
 class DemoConnector(DatabaseConnector):
     """Deterministic connector used for offline demonstrations only."""
 
+    # region Function: Profile
     def _profile(self) -> ConnectionConfig:
         """Return the same neutral configuration used by live connectors."""
         return Config.connection_config()
+    # endregion Function: Profile
 
+    # region Function: Target database
     def _target_database(self, database: str | None) -> str:
         """Resolve a requested demo database to a deterministic fallback."""
         profile = self._profile()
         return (database or profile.database or "qa_demo").strip() or "qa_demo"
+    # endregion Function: Target database
 
+    # region Function: Connect
     def connect(self, database: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
         """Return simulated connection context without opening a network socket."""
         return {"connector_type": self.__class__.__name__, "database": self._target_database(database), "mode": "demo"}
+    # endregion Function: Connect
 
+    # region Function: Test connection
     def test_connection(self, database: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
         """Return a predictable successful connection snapshot for demos."""
         target_database = self._target_database(database)
@@ -88,14 +96,18 @@ class DemoConnector(DatabaseConnector):
                 "utc_time": "2026-07-04T00:00:00+00:00",
             },
         }
+    # endregion Function: Test connection
 
+    # region Function: Health check
     def health_check(self, database: str | None = None, timeout_seconds: int | None = None) -> dict[str, Any]:
         """Return deterministic liveness data without external dependencies."""
         snapshot = self.test_connection(database=database, timeout_seconds=timeout_seconds)
         snapshot["mode"] = "offline_demo"
         snapshot["note"] = "Demo connector only. No external database is contacted."
         return snapshot
+    # endregion Function: Health check
 
+    # region Function: List databases
     def list_databases(self, timeout_seconds: int | None = None) -> dict[str, Any]:
         """List the in-memory sample databases exposed by this connector."""
         return {
@@ -104,7 +116,9 @@ class DemoConnector(DatabaseConnector):
             "count": len(_DEMO_DATABASES),
             "databases": list(_DEMO_DATABASES),
         }
+    # endregion Function: List databases
 
+    # region Function: List tables
     def list_tables(
         self,
         database: str | None = None,
@@ -125,7 +139,9 @@ class DemoConnector(DatabaseConnector):
             "count": len(tables),
             "tables": tables,
         }
+    # endregion Function: List tables
 
+    # region Function: Describe table
     def describe_table(
         self,
         database: str | None = None,
@@ -146,7 +162,9 @@ class DemoConnector(DatabaseConnector):
             "column_count": len(columns),
             "columns": columns,
         }
+    # endregion Function: Describe table
 
+    # region Function: Execute query
     def execute_query(
         self,
         query: str,
@@ -177,10 +195,14 @@ class DemoConnector(DatabaseConnector):
             "columns": payload["columns"],
             "rows": rows,
         }
+    # endregion Function: Execute query
 
+    # region Function: Close
     def close(self) -> None:
         """Satisfy the connector lifecycle contract; no resource is open."""
         return None
+    # endregion Function: Close
+# endregion Class: DemoConnector
 
 
 Connector = DemoConnector

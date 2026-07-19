@@ -13,6 +13,7 @@ from typing import Any
 from models.errors import StructuredError
 
 
+# region Class: ToolResponse
 @dataclass(slots=True)
 class ToolResponse:
     """Shared response envelope for all MCP tool calls.
@@ -43,6 +44,7 @@ class ToolResponse:
         "data",
     }
 
+    # region Function: To dict
     def to_dict(self) -> dict[str, Any]:
         """Serialize the response without allowing payload keys to overwrite the envelope."""
 
@@ -65,3 +67,5 @@ class ToolResponse:
         if self.error is not None:
             response["error"] = self.error.to_dict()
         return response
+    # endregion Function: To dict
+# endregion Class: ToolResponse

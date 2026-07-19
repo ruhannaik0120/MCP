@@ -13,6 +13,7 @@ runtime_id = uuid4().hex[:12]
 runtime_started_at = datetime.now(timezone.utc).isoformat()
 
 
+# region Function: Runtime metadata
 def runtime_metadata() -> dict[str, str]:
     """Return non-secret identity metadata for this process-isolated session."""
 
@@ -21,3 +22,4 @@ def runtime_metadata() -> dict[str, str]:
         "runtime_started_at": runtime_started_at,
         "session_isolation": "one_client_per_process",
     }
+# endregion Function: Runtime metadata
