@@ -361,59 +361,211 @@ If the database account cannot run `DROP`, `DELETE`, or `UPDATE`, the MCP server
 
 ## 8. Setup From Scratch
 
-These steps assume someone has never used the project before.
+This section contains the complete first-time setup for the project. Follow it in order on a new machine. The commands assume the terminal is opened at the repository root unless a step says otherwise.
 
-### Step 1: Install prerequisites
+### 8.1 Prerequisites
 
-Install:
+The developer needs:
 
-- Python 3.12 or compatible Python 3.x version
-- Git
-- PowerShell if running on Windows
-- Database drivers needed for the systems you plan to use
+- access to the GitHub repository;
+- Git;
+- Python 3.12 recommended;
+- VS Code;
+- GitHub Copilot access if Copilot will be the MCP client;
+- access to the required Atlassian Cloud site and Jira project;
+- PowerShell on Windows;
+- company VPN or network access if a live database requires it.
 
-Database-specific notes:
+Install from the official sources:
 
-- PostgreSQL uses `psycopg[binary]`.
-- MySQL uses `mysql-connector-python`.
-- Snowflake uses `snowflake-connector-python`.
-- SQL Server uses `pyodbc`, and the machine also needs the Microsoft ODBC Driver 18 for SQL Server installed.
-- The demo connector does not need a real database.
+- Git: https://git-scm.com/downloads
+- Python: https://www.python.org/downloads/
+- VS Code: https://code.visualstudio.com/download
+- GitHub CLI, optional: https://cli.github.com/
 
-### Step 2: Clone the repository
+SQL Server also requires Microsoft ODBC Driver 18 for SQL Server. The Python package alone is not enough:
+
+- https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server
+
+PostgreSQL, MySQL, and Snowflake use the Python drivers installed from this repository's requirements file. The offline demo connector requires no database, credentials, VPN, or external driver.
+
+Confirm the main tools after installation:
+
+```powershell
+git --version
+py -3.12 --version
+code --version
+```
+
+If `py` is unavailable but `python --version` works, use `python` for the manual virtual-environment commands below.
+
+### 8.2 Get access and clone the repository
+
+For a private repository, the repository administrator must grant the developer access first. The developer must accept the GitHub invitation and verify that the repository opens in a browser while signed in to the correct GitHub account.
+
+Use one of these clone methods.
+
+#### HTTPS
+
+Copy the current HTTPS URL from the repository's **Code** menu:
 
 ```powershell
 git clone <repository-url>
 cd <repository-folder>
 ```
 
-### Step 3: Run setup
+If GitHub requests authentication, complete the browser or Git Credential Manager login. A GitHub account password is not used as a command-line Git password.
 
-From the repository root:
+#### GitHub CLI
+
+```powershell
+gh auth login
+gh auth status
+gh repo clone <owner>/<repository>
+cd <repository-folder>
+```
+
+During `gh auth login`, choose GitHub.com, HTTPS, and browser authentication.
+
+#### SSH
+
+Use this only when the developer's SSH key is already registered with GitHub:
+
+```powershell
+ssh -T git@github.com
+git clone git@github.com:<owner>/<repository>.git
+cd <repository-folder>
+```
+
+#### VS Code user interface
+
+1. Open VS Code.
+2. Select **Source Control: Clone Repository**.
+3. Select **Clone from GitHub** or paste the repository URL.
+4. Sign in with the GitHub account that has repository access.
+5. Choose a local parent folder.
+6. Open the cloned folder.
+
+After any clone method, confirm the correct repository root:
+
+```powershell
+git status
+git remote -v
+Test-Path .\clean_mcp\server.py
+Test-Path .\.vscode\mcp.json
+```
+
+Both `Test-Path` commands must return `True`. Open the repository root in VS Code, not the `clean_mcp` subfolder by itself:
+
+```powershell
+code .
+```
+
+Trust the workspace only after confirming that it is the expected repository.
+
+### 8.3 Create the Python environment on Windows
+
+From the repository root, run:
 
 ```powershell
 PowerShell -ExecutionPolicy Bypass -File .\clean_mcp\scripts\setup.ps1
 ```
 
-This creates or uses the project virtual environment and installs the MCP server dependencies.
+The script:
 
-### Step 4: Create `.env`
+1. creates `.venv` at the repository root;
+2. reuses it if its interpreter is healthy;
+3. recreates it if the interpreter is broken;
+4. upgrades pip to the minimum required by the project;
+5. installs `clean_mcp/requirements.txt`;
+6. installs the outer workflow dependencies from `requirements-e2e.txt`.
 
-Copy the example file:
+Expected final output:
 
-```powershell
-Copy-Item .\clean_mcp\.env.example .\clean_mcp\.env
+```text
+Environment ready: ...\.venv\Scripts\python.exe
 ```
 
-Do not commit `.env`.
+Confirm that the installed dependency set is consistent:
 
-The `.env` file is where local database profile values go.
+```powershell
+.\.venv\Scripts\python.exe -m pip check
+```
 
-### Step 5: Start with the demo profile
+To repair only the outer E2E/Excel dependency later, run:
 
-The demo profile is useful because it does not require a real database.
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r .\requirements-e2e.txt
+```
 
-Example:
+Do not copy another person's `.venv`. Virtual environments contain machine-specific paths and must be created locally.
+
+#### Windows manual fallback
+
+If the setup script cannot be used:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install "pip>=26.1.2"
+.\.venv\Scripts\python.exe -m pip install -r .\clean_mcp\requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r .\requirements-e2e.txt
+.\.venv\Scripts\python.exe -m pip check
+```
+
+Activation is optional because the commands use the virtual-environment Python directly. To activate it:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+If PowerShell blocks activation, either continue using `.\.venv\Scripts\python.exe` directly or allow scripts only for the current terminal process:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+### 8.4 Create the Python environment on macOS or Linux
+
+The supplied PowerShell setup script is Windows-specific. From the repository root, run:
+
+```bash
+python3.12 -m venv .venv
+./.venv/bin/python -m pip install "pip>=26.1.2"
+./.venv/bin/python -m pip install -r clean_mcp/requirements.txt
+./.venv/bin/python -m pip install -r requirements-e2e.txt
+./.venv/bin/python -m pip check
+```
+
+Activation is optional:
+
+```bash
+source .venv/bin/activate
+```
+
+If `python3.12` has a different command on the machine, use the command that starts the installed compatible Python 3 interpreter.
+
+### 8.5 Create the local environment file
+
+The real configuration file is local and ignored by Git. Create it only if it does not already exist.
+
+Windows:
+
+```powershell
+if (-not (Test-Path .\clean_mcp\.env)) {
+    Copy-Item .\clean_mcp\.env.example .\clean_mcp\.env
+}
+```
+
+macOS/Linux:
+
+```bash
+test -f clean_mcp/.env || cp clean_mcp/.env.example clean_mcp/.env
+```
+
+Never commit `clean_mcp/.env`. Never put database passwords, tokens, private keys, or connection strings in `.vscode/mcp.json`, chat prompts, tickets, logs, or screenshots.
+
+For the first run, keep the demo configuration:
 
 ```env
 DB_TYPE=demo
@@ -429,31 +581,214 @@ DB_PROFILES_JSON={"demo-local":{"db_type":"demo","host":"demo-local","database":
 LOG_LEVEL=INFO
 ```
 
-### Step 6: Verify the server
+This verifies the complete MCP path without contacting a live database. Configure real profiles only after the demo works. Database-specific examples are in Section 10.
 
-Run:
+### 8.6 Check the VS Code workspace files
+
+The repository includes:
+
+```text
+.vscode/mcp.json
+.vscode/settings.json
+```
+
+On Windows, `.vscode/mcp.json` should point to the repository's virtual-environment Python and server:
+
+```json
+{
+  "servers": {
+    "atlassian-mcp-server": {
+      "type": "http",
+      "url": "https://mcp.atlassian.com/v1/mcp/authv2"
+    },
+    "mcp-execution-framework": {
+      "type": "stdio",
+      "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+      "args": ["${workspaceFolder}\\clean_mcp\\server.py"],
+      "cwd": "${workspaceFolder}\\clean_mcp"
+    }
+  }
+}
+```
+
+The Windows interpreter setting in `.vscode/settings.json` should be:
+
+```json
+"python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+```
+
+No Windows path change is needed when `.venv` was created at the repository root.
+
+On macOS/Linux, use:
+
+```json
+{
+  "servers": {
+    "mcp-execution-framework": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["${workspaceFolder}/clean_mcp/server.py"],
+      "cwd": "${workspaceFolder}/clean_mcp"
+    }
+  }
+}
+```
+
+And set:
+
+```json
+"python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
+```
+
+If a macOS/Linux developer changes the tracked Windows workspace files locally, review `git status` before committing. A user-level VS Code MCP configuration with absolute local paths can be used instead when the team does not want OS-specific workspace changes committed.
+
+These files must not contain secrets.
+
+### 8.7 Verify the installation
+
+Windows database-MCP verification:
 
 ```powershell
 PowerShell -ExecutionPolicy Bypass -File .\clean_mcp\scripts\verify.ps1
 ```
 
-Expected result:
+The script compiles the Python source, runs the `clean_mcp` tests, performs an offline demo smoke test, and runs the outer E2E helper tests. Expected final output:
 
-- tests pass
-- architecture checks pass
-- smoke checks pass
+```text
+All verification gates passed.
+```
 
-### Step 7: Start the MCP server
+To run only the outer E2E helper tests:
 
-The server runs over standard input/output.
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q .\tests
+```
 
-From the repository root:
+macOS/Linux verification:
+
+```bash
+cd clean_mcp
+../.venv/bin/python -m compileall -q .
+../.venv/bin/python -m pytest -q
+DB_TYPE=demo DB_HOST=demo-local DB_DATABASE=qa_demo DB_USERNAME= DB_PASSWORD= DB_CONNECTION_OPTIONS='{}' DB_ACTIVE_PROFILE=demo-local ../.venv/bin/python tests/smoke_test.py
+cd ..
+./.venv/bin/python -m pytest -q tests
+```
+
+Do not continue to a live database until the offline verification passes.
+
+### 8.8 Sign in to GitHub Copilot in VS Code
+
+GitHub Copilot is the AI client in this setup. It is separate from Git repository authentication.
+
+1. Open the repository root in VS Code.
+2. Select the Copilot icon in the status bar.
+3. Select **Use AI Features** or **Sign in to use Copilot**.
+4. Complete the GitHub browser login.
+5. Use the GitHub account that has Copilot access.
+6. Open Copilot Chat.
+7. Select **Agent** mode when MCP tools are needed.
+
+If Copilot is not visible, update VS Code and install or enable the official GitHub Copilot and GitHub Copilot Chat extensions. If the wrong account is active, sign out through the VS Code Accounts menu and sign in again.
+
+### 8.9 Connect Atlassian Rovo MCP in VS Code
+
+The tracked `.vscode/mcp.json` includes the shared Atlassian Rovo MCP endpoint. Authentication is completed separately by each developer and is not stored in Git.
+
+1. Press `Ctrl+Shift+P`.
+2. Run **MCP: List Servers**.
+3. Select `atlassian-mcp-server`.
+4. Select **Start Server**.
+5. Complete the Atlassian browser authorization.
+6. Sign in with the Atlassian account that can access the required Jira site.
+7. Approve only the access required by the workflow and organization policy.
+8. Return to VS Code and confirm the server shows as running.
+9. Open Copilot Chat in Agent mode and confirm the Atlassian tools are available.
+
+If the server is not listed, run **MCP: Add Server**, choose **HTTP**, enter `https://mcp.atlassian.com/v1/mcp/authv2`, and name it `atlassian-mcp-server`. Save it to the workspace only if the tracked `.vscode/mcp.json` entry is genuinely missing.
+
+For a connection check, ask Copilot Agent mode to show the current Atlassian user and accessible Atlassian resources. Confirm the expected Jira site is returned before requesting a ticket. Atlassian permissions remain limited to what the signed-in account and organization allow.
+
+Official setup reference: https://support.atlassian.com/atlassian-rovo-mcp-server/docs/setting-up-ides/
+
+### 8.10 Start the local database MCP server in VS Code
+
+1. Press `Ctrl+Shift+P`.
+2. Run **MCP: List Servers**.
+3. Select `mcp-execution-framework`.
+4. Select **Start Server**.
+5. Review the command and paths in `.vscode/mcp.json`.
+6. Trust the server only when it points to this repository's `.venv` and `clean_mcp/server.py`.
+7. Open Copilot Chat in Agent mode.
+8. Open the tools selector and confirm the MCP tools are available.
+
+Expected tools include:
+
+```text
+tool_list_connection_profiles
+tool_switch_connection_profile
+tool_reload_configuration
+tool_config_diagnostics
+tool_test_connection
+tool_health
+tool_list_databases
+tool_list_tables
+tool_describe_table
+tool_suggest_columns
+tool_execute_query
+```
+
+If startup fails, use **MCP: List Servers**, select the server, and choose **Show Output**.
+
+A manual startup check is:
 
 ```powershell
 .\.venv\Scripts\python.exe .\clean_mcp\server.py
 ```
 
-Usually, you do not manually run this command in a terminal for day-to-day use. Instead, your AI client starts it using its MCP configuration.
+The process normally waits for stdio input. Press `Ctrl+C` to stop the manual check before starting it through VS Code.
+
+### 8.11 Verify the database MCP connection with the demo profile
+
+In Copilot Chat Agent mode, ask:
+
+```text
+Use the mcp-execution-framework tools. List the configured connection profiles,
+show redacted configuration diagnostics, test the active demo connection, list
+the tables in qa_demo, and describe public.demo_items. Do not use a live
+database and do not change files.
+```
+
+Expected results:
+
+- `demo-local` is active;
+- the connection test succeeds;
+- `qa_demo` is available;
+- `demo_items` and `validation_results` are listed;
+- diagnostics do not expose passwords.
+
+After that, test an approved demo query through `tool_execute_query`:
+
+```sql
+SELECT * FROM demo_items
+```
+
+The demo connector returns deterministic sample rows without a network connection.
+
+### 8.12 Configure a live database only after the demo passes
+
+1. Add the approved named profile to `DB_PROFILES_JSON` in `clean_mcp/.env`.
+2. Keep the JSON on one line and validate its syntax.
+3. Start or restart the MCP server, or call `tool_reload_configuration(confirm=true)` after approval.
+4. Call `tool_list_connection_profiles`.
+5. Resolve every `ready=false` issue.
+6. Obtain approval before switching profiles.
+7. Call `tool_switch_connection_profile(name, confirm=true)`.
+8. Confirm `tool_test_connection` succeeds.
+9. Use metadata tools before generating SQL.
+10. Execute only one approved SQL statement per tool call.
+
+The detailed profile formats for demo, PostgreSQL, Snowflake, MySQL, and SQL Server are in Section 10. General connection and query troubleshooting is in Section 13.
 
 ## 9. Connecting The MCP Server To AI Agents
 
@@ -473,11 +808,11 @@ Use this shape as the starting point for any MCP-compatible client:
 {
   "mcpServers": {
     "mcp-execution-framework": {
-      "command": "C:\\Users\\ruhan\\OneDrive\\Desktop\\sql_server_mcp_patched\\.venv\\Scripts\\python.exe",
+      "command": "C:\\path\\to\\MCP\\.venv\\Scripts\\python.exe",
       "args": [
-        "C:\\Users\\ruhan\\OneDrive\\Desktop\\sql_server_mcp_patched\\clean_mcp\\server.py"
+        "C:\\path\\to\\MCP\\clean_mcp\\server.py"
       ],
-      "cwd": "C:\\Users\\ruhan\\OneDrive\\Desktop\\sql_server_mcp_patched"
+      "cwd": "C:\\path\\to\\MCP\\clean_mcp"
     }
   }
 }
@@ -519,9 +854,9 @@ For clients that use a global JSON MCP config, use an absolute-path configuratio
 {
   "mcpServers": {
     "mcp-execution-framework": {
-      "command": "C:\\Users\\ruhan\\OneDrive\\Desktop\\sql_server_mcp_patched\\.venv\\Scripts\\python.exe",
+      "command": "C:\\path\\to\\MCP\\.venv\\Scripts\\python.exe",
       "args": [
-        "C:\\Users\\ruhan\\OneDrive\\Desktop\\sql_server_mcp_patched\\clean_mcp\\server.py"
+        "C:\\path\\to\\MCP\\clean_mcp\\server.py"
       ]
     }
   }

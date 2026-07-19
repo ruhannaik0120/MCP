@@ -25,10 +25,14 @@ if (Test-Path $Venv) {
 }
 
 if (-not (Test-Path $Venv)) {
-    # Prefer the Windows Python launcher, then fall back to a PATH installation.
+    # Prefer the documented Python 3.12 runtime, then another Python 3 runtime.
     $Launcher = Get-Command py -ErrorAction SilentlyContinue
     if ($Launcher) {
-        & py -3 -m venv $Venv
+        & py -3.12 -m venv $Venv
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Python 3.12 was not found; trying the default Python 3 installation."
+            & py -3 -m venv $Venv
+        }
         if ($LASTEXITCODE -ne 0) { throw "Failed to create the virtual environment with py." }
     } else {
         $PythonCommand = Get-Command python -ErrorAction Stop
@@ -42,5 +46,7 @@ $Python = Join-Path $Venv "Scripts\python.exe"
 & $Python -m pip install "pip>=26.1.2"
 if ($LASTEXITCODE -ne 0) { throw "Failed to install the minimum secure pip version." }
 & $Python -m pip install -r (Join-Path $ProjectRoot "requirements.txt")
-if ($LASTEXITCODE -ne 0) { throw "Failed to install project dependencies." }
+if ($LASTEXITCODE -ne 0) { throw "Failed to install database MCP dependencies." }
+& $Python -m pip install -r (Join-Path $WorkspaceRoot "requirements-e2e.txt")
+if ($LASTEXITCODE -ne 0) { throw "Failed to install E2E helper dependencies." }
 Write-Host "Environment ready: $Python"
