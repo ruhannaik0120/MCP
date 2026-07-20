@@ -1,14 +1,18 @@
 {
-  "artifact_root": "poc_runs",
-  "required_files": [
-    "ticket_context.md",
-    "qa_plan.md",
-    "generated_queries.sql",
-    "approval_log.md",
-    "run_log.md",
-    "execution_result.json"
-  ],
-  "output_folder": "output",
+  "ticket_runs_root": "ticket_runs",
+  "logs_root": "logs",
+  "output_root": "output",
+  "ticket_path_pattern": "ticket_runs/<ticket-id>",
+  "stable_artifact_paths": {
+    "ticket_context": "ticket_context.md",
+    "qa_plan": "qa_plan.md",
+    "generated_sql": "generated_sql/generated_queries.sql",
+    "approvals": "approvals/approval_log.md",
+    "execution_results": "execution_results/execution_result.json",
+    "workflow_log": "logs/<ticket-id>.log",
+    "html_report": "output/<ticket-id>/report.html",
+    "excel_report": "output/<ticket-id>/report.xlsx"
+  },
   "execution_result_schema_version": "1.0",
   "validation_statuses": [
     "passed",
@@ -47,7 +51,7 @@
   "mcp_boundaries": {
     "atlassian_mcp": "Jira ticket context retrieval only.",
     "database_mcp": "Database profile selection, connection checks, metadata inspection, and approved query execution only.",
-    "workflow_layer": "Coordinates the E2E run and stores artifacts outside clean_mcp.",
+    "workflow_layer": "Coordinates the E2E run and stores ticket evidence, shared logs, and final outputs outside MCP.",
     "credentials": "Keep credentials in approved secret or database-profile configuration; never store them in run artifacts."
   }
 }

@@ -8,35 +8,44 @@ import sys
 
 import pytest
 
-from scripts import export_results, init_poc_run
+from scripts import export_results, init_ticket_run
 
 
 # region Function: Test ticket folder names are stable and collision resistant
-def test_ticket_folder_names_are_stable_and_collision_resistant():
-    assert init_poc_run.sanitize_ticket_key("abc-123") == "ABC-123"
-    first = init_poc_run.sanitize_ticket_key("ABC/123")
-    second = init_poc_run.sanitize_ticket_key("ABC?123")
+def test_ticket_run_names_are_stable_and_collision_resistant():
+    assert init_ticket_run.sanitize_ticket_key("abc-123") == "ABC-123"
+    first = init_ticket_run.sanitize_ticket_key("ABC/123")
+    second = init_ticket_run.sanitize_ticket_key("ABC?123")
 
     assert first != second
     assert first == export_results.sanitize_ticket_key("ABC/123")
     assert "/" not in first
-    assert init_poc_run.sanitize_ticket_key("CON.txt").startswith("RUN-")
+    assert init_ticket_run.sanitize_ticket_key("CON.txt").startswith("RUN-")
 # endregion Function: Test ticket folder names are stable and collision resistant
 
 
 # region Function: Test initialize run is idempotent
 def test_initialize_run_is_idempotent(tmp_path: Path):
-    run_folder, created = init_poc_run.initialize_run("ABC-123", tmp_path)
+    ticket_runs_root = tmp_path / "ticket_runs"
+    logs_root = tmp_path / "logs"
+    run_folder, created = init_ticket_run.initialize_run("ABC-123", ticket_runs_root, logs_root)
     marker = run_folder / "qa_plan.md"
     marker.write_text("keep this", encoding="utf-8")
 
-    _, created_again = init_poc_run.initialize_run("ABC-123", tmp_path)
+    _, created_again = init_ticket_run.initialize_run("ABC-123", ticket_runs_root, logs_root)
 
     assert len(created) == 6
     assert created_again == []
     assert marker.read_text(encoding="utf-8") == "keep this"
-    payload = json.loads((run_folder / "execution_result.json").read_text(encoding="utf-8"))
+    payload = json.loads(
+        (run_folder / "execution_results" / "execution_result.json").read_text(encoding="utf-8")
+    )
     assert payload["schema_version"] == "1.0"
+    assert (run_folder / "generated_sql" / "generated_queries.sql").is_file()
+    assert (run_folder / "approvals" / "approval_log.md").is_file()
+    assert (logs_root / "ABC-123.log").is_file()
+    assert not (run_folder / "logs").exists()
+    assert not (run_folder / "output").exists()
 # endregion Function: Test initialize run is idempotent
 
 
@@ -181,13 +190,16 @@ def test_excel_export_creates_safe_expected_sheets(tmp_path: Path):
 # region Function: Test cli initialization and both exports work end to end
 def test_cli_initialization_and_both_exports_work_end_to_end(tmp_path: Path, monkeypatch, capsys):
     pytest.importorskip("openpyxl")
-    artifact_root = tmp_path / "poc_runs"
-    monkeypatch.setattr(init_poc_run, "ARTIFACT_ROOT", artifact_root)
-    monkeypatch.setattr(sys, "argv", ["init_poc_run.py", "ABC-123"])
+    ticket_runs_root = tmp_path / "ticket_runs"
+    logs_root = tmp_path / "logs"
+    output_root = tmp_path / "output"
+    monkeypatch.setattr(init_ticket_run, "TICKET_RUNS_ROOT", ticket_runs_root)
+    monkeypatch.setattr(init_ticket_run, "LOGS_ROOT", logs_root)
+    monkeypatch.setattr(sys, "argv", ["init_ticket_run.py", "ABC-123"])
 
-    assert init_poc_run.main() == 0
+    assert init_ticket_run.main() == 0
 
-    result_path = artifact_root / "ABC-123" / "execution_result.json"
+    result_path = ticket_runs_root / "ABC-123" / "execution_results" / "execution_result.json"
     result_path.write_text(
         json.dumps(
             {
@@ -208,11 +220,13 @@ def test_cli_initialization_and_both_exports_work_end_to_end(tmp_path: Path, mon
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(export_results, "ARTIFACT_ROOT", artifact_root)
+    monkeypatch.setattr(export_results, "TICKET_RUNS_ROOT", ticket_runs_root)
+    monkeypatch.setattr(export_results, "OUTPUT_ROOT", output_root)
     monkeypatch.setattr(sys, "argv", ["export_results.py", "ABC-123", "--format", "both"])
 
     assert export_results.main() == 0
-    assert (artifact_root / "ABC-123" / "output" / "report.html").is_file()
-    assert (artifact_root / "ABC-123" / "output" / "report.xlsx").is_file()
+    assert (output_root / "ABC-123" / "report.html").is_file()
+    assert (output_root / "ABC-123" / "report.xlsx").is_file()
+    assert not (ticket_runs_root / "ABC-123" / "output").exists()
     assert "report.xlsx" in capsys.readouterr().out
 # endregion Function: Test cli initialization and both exports work end to end
