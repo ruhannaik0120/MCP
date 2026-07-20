@@ -36,7 +36,7 @@ This MCP server is a reusable database execution framework.
 The server lives in:
 
 ```text
-clean_mcp/
+MCP/
 ```
 
 Its job is to let an AI client safely work with configured database systems through named profiles. It does not contain Jira workflow logic, QA ticket logic, report generation logic, or business-specific test orchestration. Those belong outside the MCP server.
@@ -110,7 +110,7 @@ This is the overall flow at a high level:
                                | MCP tool call
                                v
                     +----------------------+
-                    |   clean_mcp Server   |
+                    |      MCP Server      |
                     |  profile + safety +  |
                     |  execution framework |
                     +----------+-----------+
@@ -133,12 +133,12 @@ This is the overall flow at a high level:
 
 Plain-English version:
 
-1. The AI client connects to `clean_mcp`.
+1. The AI client connects to `MCP`.
 2. The AI client asks what profiles are available.
 3. A human approves the profile switch and SQL execution.
-4. `clean_mcp` connects to the configured database.
-5. `clean_mcp` executes the approved SQL.
-6. `clean_mcp` returns a structured response.
+4. `MCP` connects to the configured database.
+5. `MCP` executes the approved SQL.
+6. `MCP` returns a structured response.
 7. The AI client uses the response for QA validation or other analysis.
 
 ## 5. Folder Overview
@@ -146,7 +146,7 @@ Plain-English version:
 The MCP server is organized like this:
 
 ```text
-clean_mcp/
+MCP/
 |-- server.py
 |-- config.py
 |-- logger.py
@@ -158,8 +158,7 @@ clean_mcp/
 |-- validation/
 |-- models/
 |-- tests/
-|-- scripts/
-`-- docs/
+`-- scripts/
 ```
 
 ### `server.py`
@@ -451,11 +450,11 @@ After any clone method, confirm the correct repository root:
 ```powershell
 git status
 git remote -v
-Test-Path .\clean_mcp\server.py
+Test-Path .\MCP\server.py
 Test-Path .\.vscode\mcp.json
 ```
 
-Both `Test-Path` commands must return `True`. Open the repository root in VS Code, not the `clean_mcp` subfolder by itself:
+Both `Test-Path` commands must return `True`. Open the repository root in VS Code, not the `MCP` subfolder by itself:
 
 ```powershell
 code .
@@ -468,7 +467,7 @@ Trust the workspace only after confirming that it is the expected repository.
 From the repository root, run:
 
 ```powershell
-PowerShell -ExecutionPolicy Bypass -File .\clean_mcp\scripts\setup.ps1
+PowerShell -ExecutionPolicy Bypass -File .\MCP\scripts\setup.ps1
 ```
 
 The script:
@@ -477,7 +476,7 @@ The script:
 2. reuses it if its interpreter is healthy;
 3. recreates it if the interpreter is broken;
 4. upgrades pip to the minimum required by the project;
-5. installs `clean_mcp/requirements.txt`;
+5. installs `MCP/requirements.txt`;
 6. installs the outer workflow dependencies from `requirements-e2e.txt`.
 
 Expected final output:
@@ -507,7 +506,7 @@ If the setup script cannot be used:
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install "pip>=26.1.2"
-.\.venv\Scripts\python.exe -m pip install -r .\clean_mcp\requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r .\MCP\requirements.txt
 .\.venv\Scripts\python.exe -m pip install -r .\requirements-e2e.txt
 .\.venv\Scripts\python.exe -m pip check
 ```
@@ -532,7 +531,7 @@ The supplied PowerShell setup script is Windows-specific. From the repository ro
 ```bash
 python3.12 -m venv .venv
 ./.venv/bin/python -m pip install "pip>=26.1.2"
-./.venv/bin/python -m pip install -r clean_mcp/requirements.txt
+./.venv/bin/python -m pip install -r MCP/requirements.txt
 ./.venv/bin/python -m pip install -r requirements-e2e.txt
 ./.venv/bin/python -m pip check
 ```
@@ -552,18 +551,18 @@ The real configuration file is local and ignored by Git. Create it only if it do
 Windows:
 
 ```powershell
-if (-not (Test-Path .\clean_mcp\.env)) {
-    Copy-Item .\clean_mcp\.env.example .\clean_mcp\.env
+if (-not (Test-Path .\MCP\.env)) {
+    Copy-Item .\MCP\.env.example .\MCP\.env
 }
 ```
 
 macOS/Linux:
 
 ```bash
-test -f clean_mcp/.env || cp clean_mcp/.env.example clean_mcp/.env
+test -f MCP/.env || cp MCP/.env.example MCP/.env
 ```
 
-Never commit `clean_mcp/.env`. Never put database passwords, tokens, private keys, or connection strings in `.vscode/mcp.json`, chat prompts, tickets, logs, or screenshots.
+Never commit `MCP/.env`. Never put database passwords, tokens, private keys, or connection strings in `.vscode/mcp.json`, chat prompts, tickets, logs, or screenshots.
 
 For the first run, keep the demo configuration:
 
@@ -604,8 +603,8 @@ On Windows, `.vscode/mcp.json` should point to the repository's virtual-environm
     "mcp-execution-framework": {
       "type": "stdio",
       "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
-      "args": ["${workspaceFolder}\\clean_mcp\\server.py"],
-      "cwd": "${workspaceFolder}\\clean_mcp"
+      "args": ["${workspaceFolder}\\MCP\\server.py"],
+      "cwd": "${workspaceFolder}\\MCP"
     }
   }
 }
@@ -627,8 +626,8 @@ On macOS/Linux, use:
     "mcp-execution-framework": {
       "type": "stdio",
       "command": "${workspaceFolder}/.venv/bin/python",
-      "args": ["${workspaceFolder}/clean_mcp/server.py"],
-      "cwd": "${workspaceFolder}/clean_mcp"
+      "args": ["${workspaceFolder}/MCP/server.py"],
+      "cwd": "${workspaceFolder}/MCP"
     }
   }
 }
@@ -649,10 +648,10 @@ These files must not contain secrets.
 Windows database-MCP verification:
 
 ```powershell
-PowerShell -ExecutionPolicy Bypass -File .\clean_mcp\scripts\verify.ps1
+PowerShell -ExecutionPolicy Bypass -File .\MCP\scripts\verify.ps1
 ```
 
-The script compiles the Python source, runs the `clean_mcp` tests, performs an offline demo smoke test, and runs the outer E2E helper tests. Expected final output:
+The script compiles the Python source, runs the `MCP` tests, performs an offline demo smoke test, and runs the outer E2E helper tests. Expected final output:
 
 ```text
 All verification gates passed.
@@ -667,7 +666,7 @@ To run only the outer E2E helper tests:
 macOS/Linux verification:
 
 ```bash
-cd clean_mcp
+cd MCP
 ../.venv/bin/python -m compileall -q .
 ../.venv/bin/python -m pytest -q
 DB_TYPE=demo DB_HOST=demo-local DB_DATABASE=qa_demo DB_USERNAME= DB_PASSWORD= DB_CONNECTION_OPTIONS='{}' DB_ACTIVE_PROFILE=demo-local ../.venv/bin/python tests/smoke_test.py
@@ -718,7 +717,7 @@ Official setup reference: https://support.atlassian.com/atlassian-rovo-mcp-serve
 3. Select `mcp-execution-framework`.
 4. Select **Start Server**.
 5. Review the command and paths in `.vscode/mcp.json`.
-6. Trust the server only when it points to this repository's `.venv` and `clean_mcp/server.py`.
+6. Trust the server only when it points to this repository's `.venv` and `MCP/server.py`.
 7. Open Copilot Chat in Agent mode.
 8. Open the tools selector and confirm the MCP tools are available.
 
@@ -743,7 +742,7 @@ If startup fails, use **MCP: List Servers**, select the server, and choose **Sho
 A manual startup check is:
 
 ```powershell
-.\.venv\Scripts\python.exe .\clean_mcp\server.py
+.\.venv\Scripts\python.exe .\MCP\server.py
 ```
 
 The process normally waits for stdio input. Press `Ctrl+C` to stop the manual check before starting it through VS Code.
@@ -777,7 +776,7 @@ The demo connector returns deterministic sample rows without a network connectio
 
 ### 8.12 Configure a live database only after the demo passes
 
-1. Add the approved named profile to `DB_PROFILES_JSON` in `clean_mcp/.env`.
+1. Add the approved named profile to `DB_PROFILES_JSON` in `MCP/.env`.
 2. Keep the JSON on one line and validate its syntax.
 3. Start or restart the MCP server, or call `tool_reload_configuration(confirm=true)` after approval.
 4. Call `tool_list_connection_profiles`.
@@ -808,11 +807,11 @@ Use this shape as the starting point for any MCP-compatible client:
 {
   "mcpServers": {
     "mcp-execution-framework": {
-      "command": "C:\\path\\to\\MCP\\.venv\\Scripts\\python.exe",
+      "command": "C:\\path\\to\\qa_automation\\.venv\\Scripts\\python.exe",
       "args": [
-        "C:\\path\\to\\MCP\\clean_mcp\\server.py"
+        "C:\\path\\to\\qa_automation\\MCP\\server.py"
       ],
-      "cwd": "C:\\path\\to\\MCP\\clean_mcp"
+      "cwd": "C:\\path\\to\\qa_automation\\MCP"
     }
   }
 }
@@ -832,7 +831,7 @@ Example shape:
     "mcp-execution-framework": {
       "type": "stdio",
       "command": ".\\.venv\\Scripts\\python.exe",
-      "args": [".\\clean_mcp\\server.py"]
+      "args": [".\\MCP\\server.py"]
     }
   }
 }
@@ -843,7 +842,7 @@ Exact field names may vary by client, but the required information is always:
 - server name
 - transport type: `stdio`
 - Python executable path
-- `clean_mcp/server.py` path
+- `MCP/server.py` path
 - working directory
 
 ### Claude Desktop style configuration
@@ -854,9 +853,9 @@ For clients that use a global JSON MCP config, use an absolute-path configuratio
 {
   "mcpServers": {
     "mcp-execution-framework": {
-      "command": "C:\\path\\to\\MCP\\.venv\\Scripts\\python.exe",
+      "command": "C:\\path\\to\\qa_automation\\.venv\\Scripts\\python.exe",
       "args": [
-        "C:\\path\\to\\MCP\\clean_mcp\\server.py"
+        "C:\\path\\to\\qa_automation\\MCP\\server.py"
       ]
     }
   }
@@ -1223,13 +1222,13 @@ Example:
 Create:
 
 ```text
-clean_mcp/connectors/<connector_name>/
+MCP/connectors/<connector_name>/
 ```
 
 Example:
 
 ```text
-clean_mcp/connectors/redshift/
+MCP/connectors/redshift/
 ```
 
 Add:
@@ -1593,13 +1592,13 @@ Do not make normal unit tests depend on external database availability.
 From repository root:
 
 ```powershell
-PowerShell -ExecutionPolicy Bypass -File .\clean_mcp\scripts\verify.ps1
+PowerShell -ExecutionPolicy Bypass -File .\MCP\scripts\verify.ps1
 ```
 
 Or run tests directly:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest clean_mcp\tests
+.\.venv\Scripts\python.exe -m pytest MCP\tests
 ```
 
 The connector is not ready to merge unless existing tests and new connector tests pass.
@@ -1619,7 +1618,7 @@ Check:
 Manual check:
 
 ```powershell
-.\.venv\Scripts\python.exe .\clean_mcp\server.py
+.\.venv\Scripts\python.exe .\MCP\server.py
 ```
 
 ### Profile appears but is not ready
@@ -1703,9 +1702,9 @@ Check:
 5. Are required database drivers installed in that virtual environment?
 6. Are company VPN/network rules active for the MCP process?
 
-## 14. Delivery Notes
+## 14. Component Boundary
 
-This MCP server is the deliverable database execution layer.
+This MCP server is the reusable database execution component within the larger QA Automation project.
 
 It is intentionally separate from:
 
@@ -1734,11 +1733,11 @@ The server is ready to be reused by a broader QA automation project because it p
 Use this checklist when giving the server to someone new.
 
 1. Clone the repository.
-2. Run `clean_mcp/scripts/setup.ps1`.
-3. Copy `clean_mcp/.env.example` to `clean_mcp/.env`.
+2. Run `MCP/scripts/setup.ps1`.
+3. Copy `MCP/.env.example` to `MCP/.env`.
 4. Configure `DB_PROFILES_JSON`.
 5. Keep real credentials out of Git.
-6. Run `clean_mcp/scripts/verify.ps1`.
+6. Run `MCP/scripts/verify.ps1`.
 7. Add the MCP server command to the AI client's MCP config.
 8. Restart the AI client.
 9. Call `tool_list_connection_profiles`.
@@ -1747,18 +1746,3 @@ Use this checklist when giving the server to someone new.
 12. Use metadata tools to inspect database structure.
 13. Execute one approved SQL statement per call with `tool_execute_query`.
 14. Use returned structured results for QA validation.
-
-## 16. What To Say In A Presentation
-
-Short explanation:
-
-This project delivers a reusable MCP database execution server for AI-assisted QA. It lets an AI agent safely connect to approved database profiles, inspect metadata, execute approved SQL, and return structured results without exposing credentials. The server is connector-based, so PostgreSQL, Snowflake, MySQL, SQL Server, and future systems can be accessed through one stable MCP tool interface.
-
-Key value:
-
-- AI clients do not need custom database code.
-- Credentials stay in configuration, not in prompts.
-- Profile switches are explicit and approval-gated.
-- Results are structured and auditable.
-- New database backends can be added by implementing one connector contract.
-

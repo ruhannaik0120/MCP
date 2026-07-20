@@ -15,13 +15,13 @@ $WorkspaceRoot = Split-Path -Parent $ProjectRoot
 $Python = Join-Path $WorkspaceRoot ".venv\Scripts\python.exe"
 
 if (-not (Test-Path $Python)) {
-    throw "Virtual environment missing. Run clean_mcp\scripts\setup.ps1 first."
+    throw "Virtual environment missing. Run MCP\scripts\setup.ps1 first."
 }
 #endregion Workspace path resolution and prerequisite check
 
 #region Isolated verification workspace
 $SystemTemp = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
-$TestTemp = Join-Path $SystemTemp ("clean-mcp-verify-{0}-{1}" -f $PID, [guid]::NewGuid().ToString("N"))
+$TestTemp = Join-Path $SystemTemp ("mcp-verify-{0}-{1}" -f $PID, [guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $TestTemp -Force | Out-Null
 #endregion Isolated verification workspace
 

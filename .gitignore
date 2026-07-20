@@ -5,7 +5,7 @@
 .env
 .env.*
 !**/.env.example
-clean_mcp/.test-runtime/
+MCP/.test-runtime/
 **/__pycache__/
 *.py[cod]
 *.log
@@ -17,7 +17,12 @@ htmlcov/
 Thumbs.db
 desktop.ini
 
-# Generated E2E PoC run artifacts (keep folder documentation in Git)
-poc_runs/*
-!poc_runs/.gitkeep
-!poc_runs/README.md
+# Generated ticket-scoped workflow artifacts
+ticket_runs/*
+!ticket_runs/.gitkeep
+
+# Generated project-level logs and published outputs
+logs/*
+!logs/.gitkeep
+output/*
+!output/.gitkeep

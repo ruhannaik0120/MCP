@@ -1,4 +1,4 @@
-"""Export saved E2E PoC execution results to HTML or Excel."""
+"""Export saved ticket-run execution results to HTML or Excel."""
 
 from __future__ import annotations
 
@@ -12,7 +12,8 @@ from typing import Any
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-ARTIFACT_ROOT = REPOSITORY_ROOT / "poc_runs"
+TICKET_RUNS_ROOT = REPOSITORY_ROOT / "ticket_runs"
+OUTPUT_ROOT = REPOSITORY_ROOT / "output"
 SENSITIVE_KEY_PARTS = (
     "password",
     "passwd",
@@ -41,7 +42,7 @@ _QA_FAIL_STATUSES = {"failed", "fail"}
 
 # region Function: Sanitize ticket key
 def sanitize_ticket_key(ticket_key: str) -> str:
-    """Return the same safe folder name used by init_poc_run.py."""
+    """Return the same safe folder name used by init_ticket_run.py."""
 
     original = ticket_key.strip()
     normalized = original.upper()
@@ -529,7 +530,7 @@ def export_excel(
 
 # region Function: Main
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Export saved E2E PoC execution results.")
+    parser = argparse.ArgumentParser(description="Export saved ticket-run execution results.")
     parser.add_argument("ticket_key", help="Jira ticket key, for example ABC-123")
     parser.add_argument(
         "--format",
@@ -542,8 +543,9 @@ def main() -> int:
 
     try:
         ticket_id = sanitize_ticket_key(args.ticket_key)
-        run_folder = _safe_child(ARTIFACT_ROOT, ticket_id)
-        result_path = _safe_child(run_folder, "execution_result.json")
+        run_folder = _safe_child(TICKET_RUNS_ROOT, ticket_id)
+        results_folder = _safe_child(run_folder, "execution_results")
+        result_path = _safe_child(results_folder, "execution_result.json")
         payload = load_execution_result(result_path)
         validate_report_payload(ticket_id, payload, require_results=args.export_format != "json_only")
     except (FileNotFoundError, OSError, ValueError) as exc:
@@ -560,7 +562,7 @@ def main() -> int:
         except RuntimeError as exc:
             parser.exit(2, f"Unable to export results: {exc}\n")
 
-    output_folder = _safe_child(run_folder, "output")
+    output_folder = _safe_child(OUTPUT_ROOT, ticket_id)
     output_folder.mkdir(parents=True, exist_ok=True)
     try:
         if args.export_format in {"html", "both"}:
