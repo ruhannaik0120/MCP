@@ -1,10 +1,12 @@
 """Architecture rules that keep database code behind connector boundaries."""
 
+# region Imports and module setup
 import ast
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FORBIDDEN_DRIVER_MODULES = {"pyodbc", "mysql", "psycopg", "snowflake"}
+# endregion Imports and module setup
 
 
 # region Function: Test database drivers are imported only by connectors

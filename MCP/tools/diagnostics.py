@@ -1,7 +1,9 @@
 """Configuration diagnostics MCP tool."""
 
+# region Imports and module setup
 from services import query_service
 from services.runtime_state import runtime_lock
+# endregion Imports and module setup
 
 
 # region Function: Config diagnostics

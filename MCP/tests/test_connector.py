@@ -1,15 +1,19 @@
 """Connector tests for the packaged SQL Server connector."""
 
+# region Imports and module setup
 from config import Config
 from connectors.sqlserver.connector import SQLServerConnector
 
 
 # These ODBC doubles verify connector behavior without a live SQL Server.
+# endregion Imports and module setup
+
 # region Class: FakeCursor
 class FakeCursor:
     """Return deterministic metadata rows for connector assertions."""
     # region Function: Init
     def __init__(self):
+        """Initialize this object."""
         self.description = [("server_name",), ("version",), ("logged_in_user",), ("utc_time",)]
         self._rows = [("server", "version", "user", "time")]
         self.executed = []
@@ -17,16 +21,19 @@ class FakeCursor:
 
     # region Function: Execute
     def execute(self, sql, *params):
+        """Handle execute."""
         self.executed.append((sql, params))
     # endregion Function: Execute
 
     # region Function: Fetchone
     def fetchone(self):
+        """Handle fetchone."""
         return self._rows[0]
     # endregion Function: Fetchone
 
     # region Function: Fetchall
     def fetchall(self):
+        """Handle fetchall."""
         return self._rows
     # endregion Function: Fetchall
 # endregion Class: FakeCursor
@@ -37,6 +44,7 @@ class FakeConnection:
     """Track cursor access and closure for lifecycle assertions."""
     # region Function: Init
     def __init__(self):
+        """Initialize this object."""
         self.cursor_obj = FakeCursor()
         self.closed = False
         self.autocommit = False
@@ -45,11 +53,13 @@ class FakeConnection:
 
     # region Function: Cursor
     def cursor(self):
+        """Handle cursor."""
         return self.cursor_obj
     # endregion Function: Cursor
 
     # region Function: Close
     def close(self):
+        """Handle close."""
         self.closed = True
     # endregion Function: Close
 # endregion Class: FakeConnection
@@ -63,12 +73,14 @@ class FakeDriver:
 
     # region Function: Init
     def __init__(self, connection=None):
+        """Initialize this object."""
         self.connection = connection or FakeConnection()
         self.captured = {}
     # endregion Function: Init
 
     # region Function: Connect
     def connect(self, conn_str, timeout=30):
+        """Handle connect."""
         self.captured = {"conn_str": conn_str, "timeout": timeout}
         return self.connection
     # endregion Function: Connect
@@ -78,6 +90,7 @@ class FakeDriver:
 # Establish one known profile so tests isolate only connector behavior.
 # region Function: Configure generic settings
 def _configure_generic_settings(monkeypatch):
+    """Support configure generic settings."""
     monkeypatch.setenv("DB_TYPE", "sqlserver")
     monkeypatch.setenv("DB_HOST", "localhost")
     monkeypatch.setenv("DB_DATABASE", "devdb")
@@ -93,6 +106,7 @@ def _configure_generic_settings(monkeypatch):
 # Context-managed operations must always close their ODBC connection.
 # region Function: Test connection opens and closes
 def test_connection_opens_and_closes(monkeypatch):
+    """Verify connection opens and closes."""
     _configure_generic_settings(monkeypatch)
     sql_connector = SQLServerConnector()
     driver = FakeDriver()
@@ -113,6 +127,7 @@ def test_connection_opens_and_closes(monkeypatch):
 # Remote hosts receive secure encryption defaults unless explicitly overridden.
 # region Function: Test remote sqlserver defaults to validated encryption
 def test_remote_sqlserver_defaults_to_validated_encryption(monkeypatch):
+    """Verify remote sqlserver defaults to validated encryption."""
     _configure_generic_settings(monkeypatch)
     monkeypatch.setenv("DB_HOST", "sql.company.internal")
     Config.load()
@@ -128,6 +143,7 @@ def test_remote_sqlserver_defaults_to_validated_encryption(monkeypatch):
 # A successful check returns useful metadata through the common connector shape.
 # region Function: Test test connection returns server snapshot
 def test_test_connection_returns_server_snapshot(monkeypatch):
+    """Verify test connection returns server snapshot."""
     _configure_generic_settings(monkeypatch)
     fake_connection = FakeConnection()
 
@@ -144,6 +160,7 @@ def test_test_connection_returns_server_snapshot(monkeypatch):
 
 # region Function: Test odbc values escape connection string delimiters
 def test_odbc_values_escape_connection_string_delimiters(monkeypatch):
+    """Verify odbc values escape connection string delimiters."""
     _configure_generic_settings(monkeypatch)
     monkeypatch.setenv("DB_USERNAME", "qa-user")
     monkeypatch.setenv("DB_PASSWORD", "p}ass;word")
@@ -162,6 +179,7 @@ def test_odbc_values_escape_connection_string_delimiters(monkeypatch):
 
 # region Function: Test sqlserver rejects partial explicit credentials
 def test_sqlserver_rejects_partial_explicit_credentials(monkeypatch):
+    """Verify sqlserver rejects partial explicit credentials."""
     _configure_generic_settings(monkeypatch)
     monkeypatch.setenv("DB_USERNAME", "qa-user")
     monkeypatch.setenv("DB_PASSWORD", "")

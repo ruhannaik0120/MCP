@@ -6,6 +6,7 @@ It is intended to catch environment and startup issues before starting the
 MCP server.
 """
 
+# region Imports and module setup
 import sys
 from pathlib import Path
 
@@ -15,6 +16,7 @@ if str(ROOT) not in sys.path:
 
 from config import Config, ConfigError
 from connectors.factory import ConnectorFactory
+# endregion Imports and module setup
 
 
 # region Function: Main
@@ -59,5 +61,7 @@ def _should_attempt_connection() -> bool:
 # endregion Function: Should attempt connection
 
 
+# region Smoke-test entry point
 if __name__ == "__main__":
     raise SystemExit(main())
+# endregion Smoke-test entry point

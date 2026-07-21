@@ -1,5 +1,6 @@
 """Regression tests for the external E2E run and reporting helpers."""
 
+# region Imports and module setup
 from __future__ import annotations
 
 import json
@@ -8,11 +9,13 @@ import sys
 
 import pytest
 
-from scripts import export_results, init_ticket_run
+from modules import export_results, init_ticket_run
+# endregion Imports and module setup
 
 
 # region Function: Test ticket folder names are stable and collision resistant
 def test_ticket_run_names_are_stable_and_collision_resistant():
+    """Verify ticket run names are stable and collision resistant."""
     assert init_ticket_run.sanitize_ticket_key("abc-123") == "ABC-123"
     first = init_ticket_run.sanitize_ticket_key("ABC/123")
     second = init_ticket_run.sanitize_ticket_key("ABC?123")
@@ -26,10 +29,15 @@ def test_ticket_run_names_are_stable_and_collision_resistant():
 
 # region Function: Test initialize run is idempotent
 def test_initialize_run_is_idempotent(tmp_path: Path):
+    """Verify initialize run is idempotent."""
     ticket_runs_root = tmp_path / "ticket_runs"
     logs_root = tmp_path / "logs"
     run_folder, created = init_ticket_run.initialize_run("ABC-123", ticket_runs_root, logs_root)
-    marker = run_folder / "qa_plan.md"
+    downloads_folder = run_folder / "downloads"
+    assert list(downloads_folder.iterdir()) == []
+    source_file = downloads_folder / "requirements.pdf"
+    source_file.write_bytes(b"external source")
+    marker = run_folder / "generated" / "qa_plan.md"
     marker.write_text("keep this", encoding="utf-8")
 
     _, created_again = init_ticket_run.initialize_run("ABC-123", ticket_runs_root, logs_root)
@@ -37,12 +45,17 @@ def test_initialize_run_is_idempotent(tmp_path: Path):
     assert len(created) == 6
     assert created_again == []
     assert marker.read_text(encoding="utf-8") == "keep this"
+    assert source_file.read_bytes() == b"external source"
     payload = json.loads(
-        (run_folder / "execution_results" / "execution_result.json").read_text(encoding="utf-8")
+        (run_folder / "generated" / "execution_results" / "execution_result.json").read_text(
+            encoding="utf-8"
+        )
     )
     assert payload["schema_version"] == "1.0"
-    assert (run_folder / "generated_sql" / "generated_queries.sql").is_file()
-    assert (run_folder / "approvals" / "approval_log.md").is_file()
+    assert downloads_folder.is_dir()
+    assert (run_folder / "generated").is_dir()
+    assert (run_folder / "generated" / "generated_sql" / "generated_queries.sql").is_file()
+    assert (run_folder / "generated" / "approvals" / "approval_log.md").is_file()
     assert (logs_root / "ABC-123.log").is_file()
     assert not (run_folder / "logs").exists()
     assert not (run_folder / "output").exists()
@@ -51,6 +64,7 @@ def test_initialize_run_is_idempotent(tmp_path: Path):
 
 # region Function: Test raw execution success is not a qa pass
 def test_raw_execution_success_is_not_a_qa_pass():
+    """Verify raw execution success is not a qa pass."""
     result = {"success": True, "request_id": "req-1", "rows": [{"defect_count": 2}]}
 
     assert export_results.query_status(result) == "executed_not_evaluated"
@@ -63,6 +77,7 @@ def test_raw_execution_success_is_not_a_qa_pass():
 
 # region Function: Test summary recomputes stale placeholder counts
 def test_summary_recomputes_stale_placeholder_counts():
+    """Verify summary recomputes stale placeholder counts."""
     payload = {
         "summary": {"status": "not_started", "total_queries": 0, "passed": 0},
         "query_results": [
@@ -82,6 +97,7 @@ def test_summary_recomputes_stale_placeholder_counts():
 
 # region Function: Test empty or wrong ticket report is rejected
 def test_empty_or_wrong_ticket_report_is_rejected():
+    """Verify empty or wrong ticket report is rejected."""
     empty = {"ticket_id": "ABC-123", "query_results": [], "errors": []}
     with pytest.raises(ValueError, match="No execution results"):
         export_results.validate_report_payload("ABC-123", empty, require_results=True)
@@ -94,6 +110,7 @@ def test_empty_or_wrong_ticket_report_is_rejected():
 
 # region Function: Test top level response list is normalized
 def test_top_level_response_list_is_normalized(tmp_path: Path):
+    """Verify top level response list is normalized."""
     path = tmp_path / "execution_result.json"
     path.write_text(json.dumps([{"success": True}, {"success": False}]), encoding="utf-8")
 
@@ -105,6 +122,7 @@ def test_top_level_response_list_is_normalized(tmp_path: Path):
 
 # region Function: Test sensitive values are redacted recursively
 def test_sensitive_values_are_redacted_recursively():
+    """Verify sensitive values are redacted recursively."""
     payload = {
         "auth": {"clientSecret": "hidden"},
         "connectionString": "Server=x;Password=hidden",
@@ -121,6 +139,7 @@ def test_sensitive_values_are_redacted_recursively():
 
 # region Function: Test excel cells block formulas and invalid control characters
 def test_excel_cells_block_formulas_and_invalid_control_characters():
+    """Verify excel cells block formulas and invalid control characters."""
     assert export_results._excel_cell("=HYPERLINK(\"https://example.test\")").startswith("'=")
     assert export_results._excel_cell("unsafe\x00value") == "unsafevalue"
     assert len(export_results._excel_cell("x" * 40_000)) <= 32_767
@@ -129,6 +148,7 @@ def test_excel_cells_block_formulas_and_invalid_control_characters():
 
 # region Function: Test html escapes values and reports profile
 def test_html_escapes_values_and_reports_profile(tmp_path: Path):
+    """Verify html escapes values and reports profile."""
     output = tmp_path / "report.html"
     payload = {
         "query_results": [
@@ -155,6 +175,7 @@ def test_html_escapes_values_and_reports_profile(tmp_path: Path):
 
 # region Function: Test excel export creates safe expected sheets
 def test_excel_export_creates_safe_expected_sheets(tmp_path: Path):
+    """Verify excel export creates safe expected sheets."""
     openpyxl = pytest.importorskip("openpyxl")
     workbook_class, font_class = export_results.load_openpyxl()
     output = tmp_path / "report.xlsx"
@@ -189,6 +210,7 @@ def test_excel_export_creates_safe_expected_sheets(tmp_path: Path):
 
 # region Function: Test cli initialization and both exports work end to end
 def test_cli_initialization_and_both_exports_work_end_to_end(tmp_path: Path, monkeypatch, capsys):
+    """Verify cli initialization and both exports work end to end."""
     pytest.importorskip("openpyxl")
     ticket_runs_root = tmp_path / "ticket_runs"
     logs_root = tmp_path / "logs"
@@ -199,7 +221,13 @@ def test_cli_initialization_and_both_exports_work_end_to_end(tmp_path: Path, mon
 
     assert init_ticket_run.main() == 0
 
-    result_path = ticket_runs_root / "ABC-123" / "execution_results" / "execution_result.json"
+    result_path = (
+        ticket_runs_root
+        / "ABC-123"
+        / "generated"
+        / "execution_results"
+        / "execution_result.json"
+    )
     result_path.write_text(
         json.dumps(
             {

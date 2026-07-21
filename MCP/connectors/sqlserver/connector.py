@@ -1,5 +1,6 @@
 """SQL Server implementation of the database connector interface."""
 
+# region Imports and module setup
 from __future__ import annotations
 
 import contextlib
@@ -9,6 +10,7 @@ from typing import Any
 from config import Config, ConfigError, ConnectionConfig
 from connectors.base import DatabaseConnector, unique_column_names
 from logger import logger
+# endregion Imports and module setup
 
 
 # region Class: SQLServerConnector

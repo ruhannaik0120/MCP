@@ -1,5 +1,6 @@
 """Generic runtime configuration for the MCP execution framework."""
 
+# region Imports and module setup
 from __future__ import annotations
 
 import json
@@ -76,6 +77,7 @@ _RESERVED_CONNECTION_OPTION_KEYS = frozenset(
         "sockettimeout",
     }
 )
+# endregion Imports and module setup
 
 
 # region Function: Normalize text
@@ -156,6 +158,7 @@ def _normalized_option_key(key: object) -> str:
 
 # region Function: Is sensitive option key
 def _is_sensitive_option_key(key: object) -> bool:
+    """Return whether a connection-option key may identify secret material."""
     normalized_key = _normalized_option_key(key)
     return any(part in normalized_key for part in _SENSITIVE_OPTION_KEY_PARTS)
 # endregion Function: Is sensitive option key
@@ -163,6 +166,7 @@ def _is_sensitive_option_key(key: object) -> bool:
 
 # region Function: Redact option value
 def _redact_option_value(value: object, key: object = "") -> object:
+    """Recursively redact secret-bearing connection-option values."""
     if _is_sensitive_option_key(key):
         return "[REDACTED]"
     if isinstance(value, dict):

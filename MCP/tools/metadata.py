@@ -4,8 +4,10 @@ These wrappers expose database discovery capabilities while leaving all
 connector communication and response shaping to the service layer.
 """
 
+# region Imports and module setup
 from services import query_service
 from services.runtime_state import runtime_lock
+# endregion Imports and module setup
 
 
 # region Function: List databases

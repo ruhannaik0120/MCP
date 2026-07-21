@@ -4,7 +4,9 @@ This package exposes the orchestrated service entry points used by MCP tools.
 It should not contain transport-specific code.
 """
 
+# region Imports and module setup
 from services.query_service import QueryService, get_query_service
+# endregion Imports and module setup
 
 
 # region Class: LazyQueryService

@@ -4,11 +4,13 @@ This module owns the reusable error schema returned to MCP clients. It should
 not contain transport logic, SQL logic, or client-specific behavior.
 """
 
+# region Imports and module setup
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+# endregion Imports and module setup
 
 
 # region Class: StructuredError

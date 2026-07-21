@@ -4,6 +4,7 @@ This module owns request-scoped log context, JSON formatting, and handler
 registration. It should not know anything about SQL semantics or MCP tools.
 """
 
+# region Imports and module setup
 from __future__ import annotations
 
 import contextvars
@@ -16,6 +17,7 @@ Config.load()
 
 _request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
 _environment_var: contextvars.ContextVar[str] = contextvars.ContextVar("environment", default="-")
+# endregion Imports and module setup
 
 
 # region Class: RequestContextFilter

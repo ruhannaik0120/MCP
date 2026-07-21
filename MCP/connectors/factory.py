@@ -1,5 +1,6 @@
 """Factory for creating database connectors based on configuration."""
 
+# region Imports and module setup
 from __future__ import annotations
 
 from importlib import import_module
@@ -13,6 +14,7 @@ SUPPORTED_CONNECTORS: dict[str, str] = {
     "postgresql": "connectors.postgresql.connector",
     "snowflake": "connectors.snowflake.connector",
 }
+# endregion Imports and module setup
 
 
 # region Class: ConnectorFactory

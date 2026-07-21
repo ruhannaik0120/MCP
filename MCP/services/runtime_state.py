@@ -1,5 +1,6 @@
 """Identity and synchronization for one isolated MCP runtime process."""
 
+# region Imports and module setup
 from datetime import datetime, timezone
 from threading import RLock
 from uuid import uuid4
@@ -11,6 +12,7 @@ from uuid import uuid4
 runtime_lock = RLock()
 runtime_id = uuid4().hex[:12]
 runtime_started_at = datetime.now(timezone.utc).isoformat()
+# endregion Imports and module setup
 
 
 # region Function: Runtime metadata

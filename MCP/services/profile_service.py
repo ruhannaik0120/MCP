@@ -1,5 +1,6 @@
 """Runtime connection-profile discovery and atomic switching."""
 
+# region Imports and module setup
 from __future__ import annotations
 
 import json
@@ -29,6 +30,7 @@ _PROFILE_ENV_KEYS = {
     "max_rows": "DB_MAX_ROWS",
 }
 _active_profile = os.getenv("DB_ACTIVE_PROFILE", "default").strip() or "default"
+# endregion Imports and module setup
 
 
 # region Function: Profiles

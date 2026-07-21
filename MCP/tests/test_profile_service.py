@@ -1,5 +1,6 @@
 """Tests for safe runtime connection-profile switching."""
 
+# region Imports and module setup
 import json
 from threading import Event, Thread
 
@@ -9,6 +10,7 @@ import config as config_module
 from config import Config, ConfigError
 from services import profile_service
 from services.runtime_state import runtime_lock
+# endregion Imports and module setup
 
 
 # region Function: Profiles
@@ -31,6 +33,7 @@ def profiles(monkeypatch):
 
 # region Function: Test list profiles never returns credentials
 def test_list_profiles_never_returns_credentials(monkeypatch, profiles):
+    """Verify list profiles never returns credentials."""
     profiles["demo-one"]["password"] = "top-secret"
     monkeypatch.setenv("DB_PROFILES_JSON", json.dumps(profiles))
 
@@ -44,6 +47,7 @@ def test_list_profiles_never_returns_credentials(monkeypatch, profiles):
 
 # region Function: Test list profiles reports non secret readiness issues
 def test_list_profiles_reports_non_secret_readiness_issues(monkeypatch, profiles):
+    """Verify list profiles reports non secret readiness issues."""
     monkeypatch.setenv(
         "DB_PROFILES_JSON",
         json.dumps(
@@ -71,6 +75,7 @@ def test_list_profiles_reports_non_secret_readiness_issues(monkeypatch, profiles
 
 # region Function: Test switch requires explicit confirmation
 def test_switch_requires_explicit_confirmation(profiles):
+    """Verify switch requires explicit confirmation."""
     with pytest.raises(ConfigError, match="explicit user approval"):
         profile_service.switch_connection_profile("demo-two")
 # endregion Function: Test switch requires explicit confirmation
@@ -78,6 +83,7 @@ def test_switch_requires_explicit_confirmation(profiles):
 
 # region Function: Test reload configuration requires explicit confirmation
 def test_reload_configuration_requires_explicit_confirmation(profiles):
+    """Verify reload configuration requires explicit confirmation."""
     with pytest.raises(ConfigError, match="explicit user approval"):
         profile_service.reload_runtime_configuration()
 # endregion Function: Test reload configuration requires explicit confirmation
@@ -85,6 +91,7 @@ def test_reload_configuration_requires_explicit_confirmation(profiles):
 
 # region Function: Test reload configuration resets active profile
 def test_reload_configuration_resets_active_profile(monkeypatch, profiles):
+    """Verify reload configuration resets active profile."""
     monkeypatch.setenv("DB_ACTIVE_PROFILE", "demo-one")
     monkeypatch.setattr(profile_service, "_active_profile", "default")
     monkeypatch.setattr(Config, "reload_dotenv", lambda override=True: Config.load())
@@ -98,6 +105,7 @@ def test_reload_configuration_resets_active_profile(monkeypatch, profiles):
 
 # region Function: Test reload configuration rolls back an invalid file
 def test_reload_configuration_rolls_back_an_invalid_file(monkeypatch, tmp_path, profiles):
+    """Verify reload configuration rolls back an invalid file."""
     dotenv_path = tmp_path / ".env"
     dotenv_path.write_text(
         "DB_TYPE=postgresql\n"
@@ -123,6 +131,7 @@ def test_reload_configuration_rolls_back_an_invalid_file(monkeypatch, tmp_path, 
 
 # region Function: Test list profiles accepts snowflake locator region format
 def test_list_profiles_accepts_snowflake_locator_region_format(monkeypatch, profiles):
+    """Verify list profiles accepts snowflake locator region format."""
     monkeypatch.setenv(
         "DB_PROFILES_JSON",
         json.dumps(
@@ -148,6 +157,7 @@ def test_list_profiles_accepts_snowflake_locator_region_format(monkeypatch, prof
 
 # region Function: Test switch rebuilds service and changes active database
 def test_switch_rebuilds_service_and_changes_active_database(profiles):
+    """Verify switch rebuilds service and changes active database."""
     result = profile_service.switch_connection_profile("demo-two", confirm=True)
 
     assert result["switched"] is True
@@ -160,6 +170,7 @@ def test_switch_rebuilds_service_and_changes_active_database(profiles):
 
 # region Function: Test failed switch restores previous configuration
 def test_failed_switch_restores_previous_configuration(monkeypatch, profiles):
+    """Verify failed switch restores previous configuration."""
     monkeypatch.setenv(
         "DB_PROFILES_JSON",
         json.dumps({**profiles, "broken": {"db_type": "postgresql", "database": "missing-host"}}),
@@ -176,11 +187,13 @@ def test_failed_switch_restores_previous_configuration(monkeypatch, profiles):
 
 # region Function: Test profile switch waits for an active runtime operation
 def test_profile_switch_waits_for_an_active_runtime_operation(profiles):
+    """Verify profile switch waits for an active runtime operation."""
     started = Event()
     finished = Event()
 
     # region Function: Switch profile
     def switch_profile():
+        """Handle switch profile."""
         started.set()
         profile_service.switch_connection_profile("demo-two", confirm=True)
         finished.set()

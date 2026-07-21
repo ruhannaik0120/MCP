@@ -1,8 +1,10 @@
 """MCP wrapper tests to ensure the tool surface remains stable."""
 
+# region Imports and module setup
 import tools.connection as connection_tools
 import tools.metadata as metadata_tools
 import tools.query as query_tools
+# endregion Imports and module setup
 
 
 # region Class: FakeResponse
@@ -11,11 +13,13 @@ class FakeResponse:
 
     # region Function: Init
     def __init__(self, payload):
+        """Initialize this object."""
         self._payload = payload
     # endregion Function: Init
 
     # region Function: To dict
     def to_dict(self):
+        """Handle to dict."""
         return self._payload
     # endregion Function: To dict
 # endregion Class: FakeResponse
@@ -27,11 +31,13 @@ class FakeService:
 
     # region Function: Init
     def __init__(self):
+        """Initialize this object."""
         self.calls = []
     # endregion Function: Init
 
     # region Function: Test connection
     def test_connection(self, *args, **kwargs):
+        """Verify connection."""
         self.calls.append(("test_connection", args, kwargs))
         return FakeResponse(
             {
@@ -47,6 +53,7 @@ class FakeService:
 
     # region Function: Health
     def health(self, *args, **kwargs):
+        """Handle health."""
         self.calls.append(("health", args, kwargs))
         return FakeResponse(
             {
@@ -63,6 +70,7 @@ class FakeService:
 
     # region Function: List databases
     def list_databases(self, *args, **kwargs):
+        """Handle list databases."""
         self.calls.append(("list_databases", args, kwargs))
         return FakeResponse(
             {
@@ -80,24 +88,28 @@ class FakeService:
 
     # region Function: List tables
     def list_tables(self, *args, **kwargs):
+        """Handle list tables."""
         self.calls.append(("list_tables", args, kwargs))
         return FakeResponse({"success": True, "tool": "list_tables", "environment": kwargs.get("environment", "DEV"), "request_id": "abc", "timestamp": "2026-06-28T00:00:00Z", "execution_time_ms": 1, "count": 0, "tables": []})
     # endregion Function: List tables
 
     # region Function: Describe table
     def describe_table(self, *args, **kwargs):
+        """Handle describe table."""
         self.calls.append(("describe_table", args, kwargs))
         return FakeResponse({"success": True, "tool": "describe_table", "environment": kwargs.get("environment", "DEV"), "request_id": "abc", "timestamp": "2026-06-28T00:00:00Z", "execution_time_ms": 1, "column_count": 0, "columns": []})
     # endregion Function: Describe table
 
     # region Function: Execute select query
     def execute_select_query(self, *args, **kwargs):
+        """Handle execute select query."""
         self.calls.append(("execute_select_query", args, kwargs))
         return FakeResponse({"success": True, "tool": "execute_select_query", "environment": kwargs.get("environment", "DEV"), "request_id": "abc", "timestamp": "2026-06-28T00:00:00Z", "execution_time_ms": 2, "rows": []})
     # endregion Function: Execute select query
 
     # region Function: Execute query
     def execute_query(self, *args, **kwargs):
+        """Handle execute query."""
         self.calls.append(("execute_query", args, kwargs))
         return FakeResponse({"success": True, "tool": "execute_query", "environment": kwargs.get("environment", "DEV"), "request_id": "abc", "timestamp": "2026-06-28T00:00:00Z", "execution_time_ms": 2, "rows": []})
     # endregion Function: Execute query
@@ -106,6 +118,7 @@ class FakeService:
 
 # region Function: Test tool wrappers return structured payload
 def test_tool_wrappers_return_structured_payload(monkeypatch):
+    """Verify tool wrappers return structured payload."""
     fake_service = FakeService()
     monkeypatch.setattr(connection_tools, "query_service", fake_service)
     monkeypatch.setattr(metadata_tools, "query_service", fake_service)
@@ -131,6 +144,7 @@ def test_tool_wrappers_return_structured_payload(monkeypatch):
 
 # region Function: Test query tools do not expose execution mode
 def test_query_tools_do_not_expose_execution_mode():
+    """Verify query tools do not expose execution mode."""
     import inspect
 
     assert "execution_mode" not in inspect.signature(query_tools.execute_query).parameters
@@ -140,6 +154,7 @@ def test_query_tools_do_not_expose_execution_mode():
 
 # region Function: Test server query tools do not expose execution mode
 def test_server_query_tools_do_not_expose_execution_mode():
+    """Verify server query tools do not expose execution mode."""
     import ast
     from pathlib import Path
 

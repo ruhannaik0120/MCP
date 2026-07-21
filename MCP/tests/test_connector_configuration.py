@@ -1,5 +1,6 @@
 """Backend-specific configuration mapping tests that require no live secrets."""
 
+# region Imports and module setup
 from contextlib import contextmanager
 
 import pytest
@@ -11,8 +12,11 @@ from connectors.snowflake.connector import SnowflakeConnector
 
 
 # Build profiles consistently so assertions focus on driver argument mapping.
+# endregion Imports and module setup
+
 # region Function: Configure
 def _configure(monkeypatch, db_type: str, options: str = "{}") -> None:
+    """Support configure."""
     monkeypatch.setenv("DB_TYPE", db_type)
     monkeypatch.setenv("DB_HOST", "db.example.test")
     monkeypatch.setenv("DB_DATABASE", "qa_demo")
@@ -28,6 +32,7 @@ def _configure(monkeypatch, db_type: str, options: str = "{}") -> None:
 # Each backend receives the expected driver keywords, defaults, and options.
 # region Function: Test mysql connection arguments
 def test_mysql_connection_arguments(monkeypatch):
+    """Verify mysql connection arguments."""
     _configure(monkeypatch, "mysql", '{"port":3307,"ssl_disabled":true}')
 
     kwargs = MySQLConnector()._connection_kwargs(Config.connection_config(), "qa_demo")
@@ -48,6 +53,7 @@ def test_mysql_connection_arguments(monkeypatch):
 
 # region Function: Test postgresql connection arguments
 def test_postgresql_connection_arguments(monkeypatch):
+    """Verify postgresql connection arguments."""
     _configure(monkeypatch, "postgresql", '{"port":5433,"sslmode":"require"}')
 
     kwargs = PostgreSQLConnector()._connection_kwargs(Config.connection_config(), "qa_demo")
@@ -67,6 +73,7 @@ def test_postgresql_connection_arguments(monkeypatch):
 
 # region Function: Test snowflake connection arguments
 def test_snowflake_connection_arguments(monkeypatch):
+    """Verify snowflake connection arguments."""
     _configure(
         monkeypatch,
         "snowflake",
@@ -97,6 +104,7 @@ class _WriteCursor:
 
     # region Function: Execute
     def execute(self, query, *args, **kwargs):
+        """Handle execute."""
         self.query = query
         self.execute_args = args
         self.execute_kwargs = kwargs
@@ -104,6 +112,7 @@ class _WriteCursor:
 
     # region Function: Close
     def close(self):
+        """Handle close."""
         return None
     # endregion Function: Close
 # endregion Class: WriteCursor
@@ -114,17 +123,20 @@ class _WriteConnection:
     """Record whether a transactional connector commits an accepted write."""
     # region Function: Init
     def __init__(self):
+        """Initialize this object."""
         self.cursor_object = _WriteCursor()
         self.committed = False
     # endregion Function: Init
 
     # region Function: Cursor
     def cursor(self):
+        """Handle cursor."""
         return self.cursor_object
     # endregion Function: Cursor
 
     # region Function: Commit
     def commit(self):
+        """Handle commit."""
         self.committed = True
     # endregion Function: Commit
 # endregion Class: WriteConnection
@@ -141,6 +153,7 @@ class _WriteConnection:
 )
 # MySQL, PostgreSQL, and Snowflake must commit successful write statements.
 def test_transactional_connectors_commit_writes(monkeypatch, db_type, connector_class):
+    """Verify transactional connectors commit writes."""
     _configure(monkeypatch, db_type)
     connector = connector_class()
     connection = _WriteConnection()
@@ -148,6 +161,7 @@ def test_transactional_connectors_commit_writes(monkeypatch, db_type, connector_
     # region Function: Fake connection
     @contextmanager
     def fake_connection(*args, **kwargs):
+        """Handle fake connection."""
         yield connection
     # endregion Function: Fake connection
 
@@ -164,6 +178,7 @@ def test_transactional_connectors_commit_writes(monkeypatch, db_type, connector_
 
 # region Function: Test postgresql commits write returning rows
 def test_postgresql_commits_write_returning_rows(monkeypatch):
+    """Verify postgresql commits write returning rows."""
     _configure(monkeypatch, "postgresql")
     connector = PostgreSQLConnector()
     connection = _WriteConnection()
@@ -174,6 +189,7 @@ def test_postgresql_commits_write_returning_rows(monkeypatch):
     # region Function: Fake connection
     @contextmanager
     def fake_connection(*args, **kwargs):
+        """Handle fake connection."""
         yield connection
     # endregion Function: Fake connection
 
@@ -188,6 +204,7 @@ def test_postgresql_commits_write_returning_rows(monkeypatch):
 
 # region Function: Test snowflake execute passes statement timeout
 def test_snowflake_execute_passes_statement_timeout(monkeypatch):
+    """Verify snowflake execute passes statement timeout."""
     _configure(monkeypatch, "snowflake")
     connector = SnowflakeConnector()
     cursor = _WriteCursor()
