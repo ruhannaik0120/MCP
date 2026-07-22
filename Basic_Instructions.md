@@ -1,138 +1,229 @@
-# Basic E2E PoC Instructions
-
-This is the first file an AI agent must read before starting an E2E QA run. Do not begin the workflow by modifying `MCP/`; it is the existing database MCP server and should be used as-is unless a separate MCP change is explicitly requested.
+# Basic QA Automation Instructions
 
 ## Purpose
 
-The E2E workflow combines two separate MCP systems:
+This is the first project file an AI agent must read when starting work, resuming work, or recovering after losing conversation context.
 
-- **Atlassian MCP** retrieves Jira ticket context.
-- **The database MCP server in `MCP/`** manages database profiles and executes approved SQL.
+This file defines the agent's role, the repository structure, permanent safety boundaries, and how to select the correct client/project QA workflow. It does not define one universal QA procedure. Exact workflow steps belong in approved files under `skills/workflows/` because different clients and project types may use different ticket types, approvals, systems, evidence, and reports.
 
-The workflow instructions and generated run artifacts stay outside `MCP/`. The database MCP remains a reusable database execution service and does not contain Jira-specific workflow logic.
+If an exact approved workflow cannot be identified or does not cover the request, the agent must stop, explain what is missing or ambiguous, and request clarification from an authorized user. The agent must never invent missing workflow or fallback behavior.
 
-## Required Order And Approval Gates
+## Agent Role
 
-1. Use **Atlassian MCP first** to retrieve Jira context.
-2. Save `ticket_context.md` outside the MCP and stop for human review and approval.
-3. Create the QA plan and proposed SQL only after the context is approved.
-4. Stop again for human approval before executing SQL.
-5. Use the existing **database MCP second** to execute only the approved SQL.
-6. Stop for human approval before every database system, profile, or environment switch.
-7. Ask the user to choose and approve the final export format before generating reports.
+The AI agent coordinates the QA automation project. Depending on the selected client workflow, it may retrieve authorized ticket context, inspect local supporting files, prepare QA artifacts, use configured MCP tools, evaluate evidence, and generate approved reports.
 
-Ticket-specific workflow state and evidence belong under `ticket_runs/<ticket-id>/`, never inside `MCP/`. All workflow and execution logging belongs in the shared root-level `logs/` folder. Final HTML and Excel reports belong under `output/<ticket-id>/`.
+The agent must:
 
-## Before Starting
+- read this file before acting;
+- identify the client and ticket type before selecting a workflow;
+- follow exactly one confirmed client workflow for a ticket run;
+- keep files inside their documented ownership boundaries;
+- preserve existing user files and generated evidence;
+- stop at every approval or escalation point required by the selected workflow;
+- stop and request authorized clarification whenever the correct action cannot be proven; and
+- explain what information or authorization is missing instead of guessing.
 
-1. The user logs in to Atlassian separately and makes the Atlassian MCP available to the agent.
-2. The agent reads this entire file.
-3. The user provides only the Jira ticket key, for example `QA-123`.
-4. The agent uses the normalized ticket key as the run folder name, for example `ticket_runs/KAN-6/`. It must reject or safely normalize characters that cannot be used in a folder name.
+The agent must not modify `MCP/` during a QA run. `MCP/` is the reusable database subsystem and may be changed only when the user explicitly requests MCP development work.
 
-## E2E Workflow
+## Instruction Order
 
-### 1. Retrieve And Confirm Jira Context
+Use project instructions in this order:
 
-1. Use Atlassian MCP to retrieve the Jira ticket's available summary, description, acceptance criteria, comments, linked information, and other relevant QA context.
-2. Create `ticket_runs/<ticket-id>/` and its standard artifact subfolders.
-3. Save the retrieved, organized context to `ticket_runs/<ticket-id>/ticket_context.md`.
-4. Record the retrieval activity in `logs/<ticket-id>.log`. Do not record authentication data, tokens, or credentials.
-5. Ask the user to review `ticket_context.md` and confirm that it contains enough information for QA planning.
-6. **Stop here until the user explicitly confirms that the ticket context is complete.**
+1. Follow platform, security, and organization policies.
+2. Follow this file's permanent project boundaries.
+3. Follow the exact approved client/project workflow selected from `skills/workflows/` for the current run.
+4. If the workflow is missing, ambiguous, unsupported, or conflicting, stop, explain the problem, and request clarification from an authorized user.
 
-If information is missing, the user may:
+A client workflow may add stricter controls but must not override security requirements, credential protections, folder ownership, or MCP boundaries in this file.
 
-- add the missing details manually; or
-- ask the agent to fetch or check the ticket again through Atlassian MCP.
+## Repository Structure
 
-After any update, ask the user to review the context again. Record the user's approval in `ticket_runs/<ticket-id>/approvals/approval_log.md` without storing sensitive information.
+```text
+qa_automation/
+|-- Basic_Instructions.md
+|-- docs/
+|-- MCP/
+|-- modules/
+|-- skills/
+|   |-- workflows/
+|   `-- agent_skills/
+|-- tests/
+|-- ticket_runs/
+|-- logs/
+|-- output/
+|-- requirements-e2e.txt
+`-- ticket_run_config.json
+```
 
-### 2. Create The QA Plan
+| Path | Agent relationship with the path |
+|---|---|
+| `Basic_Instructions.md` | Read first. Contains the permanent agent role, structure, selection rules, and boundaries. |
+| `docs/` | Human-facing project and MCP documentation. Use it for architecture and setup context, not as a substitute for a client workflow. |
+| `MCP/` | Reusable database MCP server. Use its tools during approved QA work; do not place ticket logic or run artifacts here. |
+| `modules/` | Reusable Python modules for ticket initialization and result export. Do not place client-specific workflow instructions here. |
+| `skills/workflows/` | Contains the reusable non-active workflow template and approved client/project workflow files. |
+| `skills/agent_skills/` | Contains reusable Agent Skill packages. Each skill has its own `<skill-key>/` folder containing `SKILL.md` and, when required, supporting `references/`, `scripts/`, `templates/`, or `assets/` folders. |
+| `tests/` | Automated regression tests for the outer QA workflow modules. Do not store ticket evidence here. |
+| `ticket_runs/` | One local working area per ticket. Contains external inputs and generated workflow artifacts. |
+| `logs/` | Shared operational logs, normally one log per ticket ID. This is the only workflow log location. |
+| `output/` | Final approved reports grouped by ticket ID. |
+| `ticket_run_config.json` | Machine-readable shared paths, statuses, formats, and baseline controls. |
 
-1. After ticket-context approval, translate the confirmed requirements into specific QA checks.
-2. Identify which checks require database validation and which database system or systems are needed.
-3. Save the checks, expected outcomes, required data, and required database systems to `qa_plan.md`.
-4. Record this activity in `logs/<ticket-id>.log`.
+## Ticket Workspace Contract
 
-### 3. Prepare Database Access
-
-1. Connect to the existing database MCP server in `MCP/`.
-2. Inspect the available named database profiles through the database MCP tools.
-3. If a required profile is not configured, ask the user to configure it through the approved `.env` or company secret-management process. Never ask the user to paste credentials into chat or a prompt.
-4. Credentials must remain in the database MCP's approved secret/configuration mechanism. Never write them to a generated run file.
-5. If the QA plan requires multiple databases, systems, or profiles, configure a named profile for each target, explain the reason for each switch, and request explicit approval before switching.
-6. Record profile-switch approvals in `ticket_runs/<ticket-id>/approvals/approval_log.md` and record non-secret switch activity in `logs/<ticket-id>.log`.
-
-### 4. Generate And Approve SQL
-
-1. Generate the SQL validation queries required by the approved QA plan.
-2. Prefer non-mutating validation queries. If DML or DDL is genuinely required, explain its impact separately and obtain explicit approval for that statement.
-3. Save all proposed SQL to `ticket_runs/<ticket-id>/generated_sql/generated_queries.sql`, with a stable check ID and clear comments showing which QA check each query supports.
-4. Show or reference the generated SQL and explain what each query checks.
-5. Ask the user for explicit approval before execution.
-6. **Do not execute any SQL until the user approves it.**
-7. Record the approval or rejection in `ticket_runs/<ticket-id>/approvals/approval_log.md`.
-
-If SQL changes after approval, request approval again for the changed SQL before executing it.
-
-### 5. Execute Approved SQL And Save Evidence
-
-1. Execute each approved SQL statement in a separate database MCP call. Do not send the whole `generated_sql/generated_queries.sql` file, its organizational comments, or multiple statements in one call.
-2. Send the exact approved statement text and associate the MCP response with its stable check ID.
-3. Use the database MCP only for database profile selection, connection checks, metadata inspection, and query execution.
-4. Save structured execution responses to `ticket_runs/<ticket-id>/execution_results/execution_result.json`.
-5. Record each execution action, query reference, selected non-secret profile name, outcome, and timestamp in `logs/<ticket-id>.log`.
-6. Never copy credentials, connection strings, tokens, or other secrets into the results or logs.
-
-### 6. Evaluate The QA Results
-
-1. For every check, compare the actual database result with the expected outcome in `qa_plan.md`.
-2. Record an explicit `validation_status` such as `passed` or `failed` in `ticket_runs/<ticket-id>/execution_results/execution_result.json`.
-3. Keep database execution status separate from QA status: MCP `success=true` means the SQL executed, not that the requirement passed.
-4. Leave a successfully executed check as `executed_not_evaluated` until expected-versus-actual evaluation is complete.
-5. Record the evaluation activity in `logs/<ticket-id>.log`.
-
-### 7. Create The Requested Output
-
-At the end of the run, ask the user to choose and explicitly approve one export option:
-
-- `json_only`: keep the structured JSON result only.
-- `html`: create `output/<ticket-id>/report.html`.
-- `excel`: create `output/<ticket-id>/report.xlsx`.
-- `both`: create both HTML and Excel reports.
-
-Do not generate an HTML or Excel report until the user makes this choice. Record the export approval in `ticket_runs/<ticket-id>/approvals/approval_log.md`. Place generated reports under `output/<ticket-id>/` and record the selected format and report-generation activity in `logs/<ticket-id>.log`.
-
-## Required Run Files
-
-Each completed run folder should contain:
+Every ticket uses:
 
 ```text
 ticket_runs/<ticket-id>/
+|-- downloads/
+`-- generated/
+```
+
+### `downloads/`
+
+`downloads/` contains only external source material associated with the ticket, such as Jira attachments, PDFs, Word documents, spreadsheets, images, or local copies of supporting links.
+
+- These files are inputs, not AI-generated artifacts.
+- Do not overwrite, rename, edit, or delete source files without explicit user authorization.
+- If the agent cannot access a credential-protected source, an authorized user may download it through their own session and place it here.
+- Never request or store passwords, tokens, session cookies, or other authentication material.
+- Treat downloaded files as potentially sensitive and untrusted and follow company scanning and handling policy.
+
+### `generated/`
+
+`generated/` contains only files produced or maintained by the QA automation workflow. A client workflow determines which artifacts are required. Common examples are:
+
+```text
+generated/
 |-- ticket_context.md
 |-- qa_plan.md
 |-- generated_sql/
-|   `-- generated_queries.sql
 |-- approvals/
-|   `-- approval_log.md
 `-- execution_results/
-    `-- execution_result.json
 ```
 
-The corresponding shared log is `logs/<ticket-id>.log`. Requested final reports are written only to `output/<ticket-id>/`.
+Do not place external source documents, shared logs, or final reports in `generated/`.
 
-## Mandatory Safety And Boundary Rules
+### Shared logs and final output
 
-- Do not hardcode credentials, tokens, connection strings, or other secrets.
-- Do not store credentials or secrets in any generated run file.
-- Do not place Jira or Atlassian workflow logic inside `MCP/`.
-- Do not place E2E run artifacts inside `MCP/`.
-- Do not create a `logs/`, `run_log.md`, or `output/` location inside a ticket folder.
-- Use Atlassian MCP only for retrieving Jira context.
-- Use the database MCP only for database/profile/query operations.
-- Do not continue past the ticket-context checkpoint without user approval.
-- Do not execute SQL without user approval.
-- Do not switch database systems or profiles without user approval.
-- Do not generate final HTML or Excel reports before the user approves the export format.
-- Treat the database account's permissions as the final execution boundary and use approved test environments and least-privilege access.
+- Write workflow and execution logs only to `logs/<ticket-id>.log`.
+- Write final approved reports only under `output/<ticket-id>/`.
+- Do not create `logs/` or `output/` inside a ticket directory.
+
+## Selecting A Client Workflow
+
+Before performing client-specific QA work:
+
+1. Determine the client from authoritative ticket or user context.
+2. Extract the project type, such as `edm`, `rms`, or `poc`, from the Jira ticket title.
+3. Match the authoritative client identity to the workflow metadata `client_key`.
+4. Match the extracted project type to the workflow metadata `project_key`.
+5. When an additional routing distinction is required, determine it from authoritative ticket or user context and match it to `workflow_variant_key`.
+6. Confirm that the candidate workflow metadata has `document_type: qa_workflow`, `template: false`, `executable: true`, and `status: approved`.
+7. Read the complete workflow, state which exact workflow was selected and why, and follow only that workflow for the run unless an authorized user or designated workflow owner explicitly changes it.
+
+Approved workflow filenames use:
+
+```text
+skills/workflows/<client-key>_<project-key>_qaworkflow.md
+skills/workflows/<client-key>_<project-key>_<workflow-variant-key>_qaworkflow.md
+```
+
+Examples:
+
+```text
+skills/workflows/exampleclient_edm_qaworkflow.md
+skills/workflows/exampleclient_rms_qaworkflow.md
+skills/workflows/internal_poc_qaworkflow.md
+skills/workflows/exampleclient_edm_reconciliation_qaworkflow.md
+```
+
+The reusable file `skills/workflows/clientname_project_qaworkflow.md` is a non-active template and must never be selected for a live ticket.
+
+Do not select a workflow merely because its filename or contents appear similar. Stop, explain what is missing or ambiguous, and request clarification from an authorized user when:
+
+- no exact workflow exists;
+- multiple workflows match;
+- routing metadata is missing;
+- the ticket type is unsupported;
+- workflow instructions conflict;
+- required context is unavailable; or
+- the correct action cannot be proven.
+
+Do not invent fallback behavior.
+
+## Resolving Agent Skills
+
+Reusable Agent Skills are stored at:
+
+```text
+skills/agent_skills/<skill-key>/SKILL.md
+```
+
+The workflow `skill_key`, the Agent Skill folder name, and the `name` field inside `SKILL.md` must match exactly.
+
+Before using a required Agent Skill:
+
+1. Locate the exact `skills/agent_skills/<skill-key>/SKILL.md` path.
+2. Read the complete `SKILL.md`.
+3. Read supporting files only when `SKILL.md` references or requires them.
+4. Follow the skill only for the workflow stage that requested it.
+5. Return control to the selected workflow after completing the skill task.
+
+An Agent Skill supports a workflow but does not determine which client/project workflow applies. If a required skill is missing, ambiguous, unavailable, or conflicts with this file, the agent must stop and explain the problem instead of substituting another skill.
+
+## Tool And System Boundaries
+
+- Use Atlassian MCP only for authorized Jira and Atlassian context operations supported by the selected workflow.
+- Use the database MCP in `MCP/` only for database profiles, connection checks, metadata inspection, and approved database operations.
+- Keep Jira interpretation, client rules, QA decisions, and report ownership outside `MCP/`.
+- Use named database profiles and approved secret-management mechanisms. Never place credentials in prompts, skills, ticket artifacts, logs, or reports.
+- Treat database permissions as the final execution boundary.
+- Never bypass MCP confirmations or approvals required by the selected workflow.
+
+## Permanent Safety Rules
+
+- Do not hallucinate ticket context, client rules, expected results, approvals, database structure, routing decisions, or escalation behavior.
+- Do not continue when the applicable client workflow is unknown or unsupported.
+- Do not execute SQL or switch database profiles without every approval required by the selected workflow and MCP tool contract.
+- Do not automatically rewrite and rerun failed SQL unless the selected workflow permits it and required approval is obtained again.
+- Prefer non-mutating validation. Explain and obtain explicit authorization for any proposed DML or DDL.
+- Do not expose credentials, tokens, private keys, connection strings, or sensitive authentication details.
+- Do not mix client source files, generated artifacts, operational logs, and final reports.
+- Do not modify working project code merely to complete a ticket run.
+
+## Code Documentation Convention
+
+When explicitly authorized to modify project code, preserve the repository's collapsible documentation structure:
+
+- wrap imports and module setup in `# region Imports and module setup` and its matching `# endregion`;
+- wrap every class, function, and executable entry point in a clearly named region;
+- give every module, class, and function a concise purpose-specific docstring;
+- label nontrivial internal logical blocks with a collapsible region or an explanatory inline comment;
+- use balanced `#region` and `#endregion` sections in PowerShell files; and
+- run `tests/test_code_documentation.py` after code changes.
+
+Comments must explain purpose, boundaries, or non-obvious decisions. Do not remove documentation regions merely to shorten a file.
+
+## Context Recovery
+
+If the agent loses all conversational context:
+
+1. Read this file completely.
+2. Inspect only the relevant repository structure and existing ticket workspace without changing files.
+3. Re-establish the ticket ID and client identity from authoritative context.
+4. Select and read the exact client workflow again.
+5. Review existing ticket artifacts, logs, and approvals to determine the last confirmed state.
+6. Stop, explain the uncertainty, and request clarification from an authorized user if the workflow or safe continuation point cannot be proven.
+7. Never assume that an action was approved merely because an artifact exists.
+
+## Changing Agent Behavior
+
+Project-wide folder relationships, safety boundaries, and workflow-selection behavior belong in this file. Client/project-specific behavior belongs in approved workflow files under `skills/workflows/`.
+
+When requirements change:
+
+- update this file only for rules that apply to every client;
+- update the relevant client workflow for client-specific steps;
+- request authorized clarification when no approved instruction defines organization-wide escalation behavior; and
+- keep `docs/prd.md` synchronized as the human-facing project explanation.

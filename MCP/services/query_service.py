@@ -1,5 +1,6 @@
 """Business and orchestration logic for MCP tools."""
 
+# region Imports and module setup
 from __future__ import annotations
 from datetime import datetime, timezone
 from difflib import SequenceMatcher
@@ -14,6 +15,7 @@ from models.errors import ErrorCode, StructuredError
 from models.responses import ToolResponse
 from services.runtime_state import runtime_lock, runtime_metadata
 from validation.sql_guard import validate_query
+# endregion Imports and module setup
 
 
 # region Class: QueryService
@@ -591,6 +593,7 @@ class QueryService:
     # region Function: Metadata value
     @staticmethod
     def _metadata_value(column: dict, *names: str) -> object:
+        """Read a metadata value using case-insensitive candidate names."""
         wanted = {name.casefold() for name in names}
         for key, value in column.items():
             if str(key).casefold() in wanted:

@@ -4,6 +4,7 @@ This module owns the standard response envelope returned by every tool. It must
 not know how SQL is executed or how MCP registers tools.
 """
 
+# region Imports and module setup
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -11,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from models.errors import StructuredError
+# endregion Imports and module setup
 
 
 # region Class: ToolResponse

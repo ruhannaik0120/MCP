@@ -1,6 +1,8 @@
 """Agent-facing tools for safe runtime connector switching."""
 
+# region Imports and module setup
 from services.profile_service import list_connection_profiles, reload_runtime_configuration, switch_connection_profile
+# endregion Imports and module setup
 
 
 # region Function: List profiles

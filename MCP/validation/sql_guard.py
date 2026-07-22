@@ -4,6 +4,7 @@ This module keeps the validation lightweight and readable. It should not parse
 SQL fully or take on connector responsibilities.
 """
 
+# region Imports and module setup
 from __future__ import annotations
 
 import re
@@ -46,6 +47,8 @@ _STATEMENT_STARTS = frozenset(
         "DENY",
     }
 )
+# endregion Imports and module setup
+
 
 # region Function: Strip quoted content
 def _strip_quoted_content(sql: str) -> str:

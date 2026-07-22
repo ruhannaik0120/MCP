@@ -1,5 +1,6 @@
 """Create the local artifact structure for a ticket-scoped QA run."""
 
+# region Imports and module setup
 from __future__ import annotations
 
 import argparse
@@ -21,6 +22,7 @@ _WINDOWS_RESERVED_NAMES = {
     *(f"COM{number}" for number in range(1, 10)),
     *(f"LPT{number}" for number in range(1, 10)),
 }
+# endregion Imports and module setup
 
 
 # region Function: Sanitize ticket key
@@ -58,6 +60,7 @@ def _safe_run_folder(ticket_runs_root: Path, ticket_id: str) -> Path:
 
 # region Function: Initial files
 def _initial_files(ticket_id: str) -> dict[Path, str]:
+    """Build the stable starter artifacts for a new ticket workspace."""
     empty_result = {
         "schema_version": "1.0",
         "ticket_id": ticket_id,
@@ -69,35 +72,38 @@ def _initial_files(ticket_id: str) -> dict[Path, str]:
     }
 
     return {
-        Path("ticket_context.md"): (
+        Path("generated/ticket_context.md"): (
             f"# Ticket Context: {ticket_id}\n\n"
             "## Jira Ticket Key\n\n"
             f"`{ticket_id}`\n\n"
             "## Retrieved Context\n\n"
-            "_To be populated by the agent through Atlassian MCP._\n\n"
+            "_To be populated by the agent through Atlassian MCP and supported files in "
+            "the ticket's downloads folder._\n\n"
+            "## Downloaded Source Files Reviewed\n\n"
+            "_List relevant filenames or state that no local source files were required._\n\n"
             "## User Review\n\n"
             "Approval status: Pending\n"
         ),
-        Path("qa_plan.md"): (
+        Path("generated/qa_plan.md"): (
             f"# QA Plan: {ticket_id}\n\n"
             "## Validation Objectives\n\n"
             "_Complete after the ticket context is approved._\n\n"
             "## Database Checks\n\n"
             "_List the required systems, profiles, checks, and expected outcomes._\n"
         ),
-        Path("generated_sql/generated_queries.sql"): (
+        Path("generated/generated_sql/generated_queries.sql"): (
             f"-- Generated validation queries for {ticket_id}\n"
             "-- Add queries only after the ticket context is approved.\n"
             "-- Give every statement a stable check ID and execute statements one at a time.\n"
             "-- Do not send these organizational comments to the database MCP.\n"
             "-- User approval is required before execution.\n"
         ),
-        Path("approvals/approval_log.md"): (
+        Path("generated/approvals/approval_log.md"): (
             f"# Approval Log: {ticket_id}\n\n"
             "| Timestamp (UTC) | Checkpoint | Decision | Notes |\n"
             "|---|---|---|---|\n"
         ),
-        Path("execution_results/execution_result.json"): json.dumps(empty_result, indent=2) + "\n",
+        Path("generated/execution_results/execution_result.json"): json.dumps(empty_result, indent=2) + "\n",
     }
 # endregion Function: Initial files
 
@@ -115,6 +121,8 @@ def initialize_run(
     run_folder = _safe_run_folder(ticket_runs_root or TICKET_RUNS_ROOT, ticket_id)
     resolved_logs_root = (logs_root or LOGS_ROOT).resolve()
     run_folder.mkdir(parents=True, exist_ok=True)
+    (run_folder / "downloads").mkdir(exist_ok=True)
+    (run_folder / "generated").mkdir(exist_ok=True)
     resolved_logs_root.mkdir(parents=True, exist_ok=True)
 
     created: list[Path] = []
@@ -143,6 +151,7 @@ def initialize_run(
 
 # region Function: Main
 def main() -> int:
+    """Run the ticket-workspace initializer command-line interface."""
     parser = argparse.ArgumentParser(description="Initialize a ticket-scoped QA run folder.")
     parser.add_argument("ticket_key", help="Jira ticket key, for example ABC-123")
     args = parser.parse_args()
@@ -163,5 +172,7 @@ def main() -> int:
 # endregion Function: Main
 
 
+# region Command-line entry point
 if __name__ == "__main__":
     raise SystemExit(main())
+# endregion Command-line entry point

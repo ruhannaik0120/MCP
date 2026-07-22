@@ -4,6 +4,7 @@ This file should only register MCP tools and start the server. It should not
 contain business logic, SQL validation, or direct connector code.
 """
 
+# region Imports and module setup
 import json
 
 from mcp.server.fastmcp import FastMCP
@@ -32,6 +33,8 @@ logger.info("MCP Server initialising...")
 
 
 # Profile tools expose safe profile metadata and approval-gated switching.
+# endregion Imports and module setup
+
 # region Function: Tool list connection profiles
 @mcp.tool()
 def tool_list_connection_profiles() -> str:
@@ -223,6 +226,8 @@ def tool_execute_select_query(
 # endregion Function: Tool execute select query
 
 
+# region Application entry point
 if __name__ == "__main__":
     logger.info("MCP Server started. Waiting for connections...")
     mcp.run(transport="stdio")
+# endregion Application entry point

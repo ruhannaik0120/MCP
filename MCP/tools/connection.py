@@ -4,8 +4,10 @@ These wrappers expose health and connection checks without embedding connector
 logic directly in the MCP entrypoint.
 """
 
+# region Imports and module setup
 from services import query_service
 from services.runtime_state import runtime_lock
+# endregion Imports and module setup
 
 
 # region Function: Test connection

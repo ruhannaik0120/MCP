@@ -1,9 +1,11 @@
 """Database connector abstraction used by the MCP runtime."""
 
+# region Imports and module setup
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
+# endregion Imports and module setup
 
 
 # region Function: Unique column names

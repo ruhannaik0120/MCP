@@ -5,6 +5,7 @@ sample metadata and query results so demos remain reliable when credentials or
 network access are unavailable.
 """
 
+# region Imports and module setup
 from __future__ import annotations
 
 import re
@@ -55,6 +56,7 @@ _DEMO_ROWS = {
         ],
     },
 }
+# endregion Imports and module setup
 
 
 # region Class: DemoConnector

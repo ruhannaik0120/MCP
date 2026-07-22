@@ -3,12 +3,39 @@
   "logs_root": "logs",
   "output_root": "output",
   "ticket_path_pattern": "ticket_runs/<ticket-id>",
+  "ticket_workspace": {
+    "downloads": "downloads",
+    "generated": "generated"
+  },
+  "workflow_routing": {
+    "workflows_root": "skills/workflows",
+    "workflow_file_patterns": [
+      "<client-key>_<project-key>_qaworkflow.md",
+      "<client-key>_<project-key>_<workflow-variant-key>_qaworkflow.md"
+    ],
+    "template": "skills/workflows/clientname_project_qaworkflow.md",
+    "active_metadata": {
+      "document_type": "qa_workflow",
+      "template": false,
+      "executable": true,
+      "status": "approved"
+    }
+  },
+  "agent_skill_resolution": {
+    "skills_root": "skills/agent_skills",
+    "instruction_file": "SKILL.md",
+    "identifier_contract": [
+      "workflow skill_key",
+      "skill folder name",
+      "SKILL.md metadata name"
+    ]
+  },
   "stable_artifact_paths": {
-    "ticket_context": "ticket_context.md",
-    "qa_plan": "qa_plan.md",
-    "generated_sql": "generated_sql/generated_queries.sql",
-    "approvals": "approvals/approval_log.md",
-    "execution_results": "execution_results/execution_result.json",
+    "ticket_context": "generated/ticket_context.md",
+    "qa_plan": "generated/qa_plan.md",
+    "generated_sql": "generated/generated_sql/generated_queries.sql",
+    "approvals": "generated/approvals/approval_log.md",
+    "execution_results": "generated/execution_results/execution_result.json",
     "workflow_log": "logs/<ticket-id>.log",
     "html_report": "output/<ticket-id>/report.html",
     "excel_report": "output/<ticket-id>/report.xlsx"
@@ -26,11 +53,12 @@
     "excel",
     "both"
   ],
+  "approval_checkpoint_scope": "Baseline controls for the tested database-validation workflow. An approved client workflow may add stricter or client-specific checkpoints but must not bypass security or MCP confirmations.",
   "human_approval_checkpoints": [
     {
       "id": "ticket_context_complete",
       "required_before": "qa_planning",
-      "description": "The user confirms that the retrieved Jira context is complete enough for QA planning."
+      "description": "The user confirms that the combined Jira context and relevant local downloaded sources are complete enough for QA planning."
     },
     {
       "id": "sql_execution",
@@ -51,7 +79,7 @@
   "mcp_boundaries": {
     "atlassian_mcp": "Jira ticket context retrieval only.",
     "database_mcp": "Database profile selection, connection checks, metadata inspection, and approved query execution only.",
-    "workflow_layer": "Coordinates the E2E run and stores ticket evidence, shared logs, and final outputs outside MCP.",
+    "workflow_layer": "Coordinates external ticket inputs under downloads, generated ticket evidence under generated, shared logs, and final outputs outside MCP.",
     "credentials": "Keep credentials in approved secret or database-profile configuration; never store them in run artifacts."
   }
 }

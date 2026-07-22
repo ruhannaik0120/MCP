@@ -1,5 +1,6 @@
 """Export saved ticket-run execution results to HTML or Excel."""
 
+# region Imports and module setup
 from __future__ import annotations
 
 import argparse
@@ -38,6 +39,7 @@ _WINDOWS_RESERVED_NAMES = {
 _EXCEL_ILLEGAL_CHARACTERS = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
 _QA_PASS_STATUSES = {"passed", "pass"}
 _QA_FAIL_STATUSES = {"failed", "fail"}
+# endregion Imports and module setup
 
 
 # region Function: Sanitize ticket key
@@ -106,6 +108,7 @@ def redact_sensitive(value: Any, key: str = "") -> Any:
 
 # region Function: Load execution result
 def load_execution_result(path: Path) -> dict[str, Any]:
+    """Load, validate, normalize, and redact saved execution evidence."""
     if not path.is_file():
         raise FileNotFoundError(f"Execution result file not found: {path}")
     try:
@@ -125,6 +128,7 @@ def load_execution_result(path: Path) -> dict[str, Any]:
 
 # region Function: Nested value
 def _nested_value(item: dict[str, Any], key: str) -> Any:
+    """Read a field from supported top-level or nested MCP response shapes."""
     if key in item:
         return item[key]
     data = item.get("data")
@@ -139,6 +143,7 @@ def _nested_value(item: dict[str, Any], key: str) -> Any:
 
 # region Function: Query results
 def query_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize supported execution-result containers into a result list."""
     for key in ("query_results", "results", "queries", "executions"):
         candidate = payload.get(key)
         if isinstance(candidate, list):
@@ -153,6 +158,7 @@ def query_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 # region Function: Query status
 def query_status(item: dict[str, Any]) -> str:
+    """Return explicit QA status without treating execution success as a pass."""
     validation_status = item.get("validation_status", item.get("qa_status"))
     if validation_status not in (None, ""):
         return str(validation_status)
@@ -170,6 +176,7 @@ def query_status(item: dict[str, Any]) -> str:
 
 # region Function: Returned row count
 def returned_row_count(item: dict[str, Any]) -> int | str:
+    """Return the reported or inferred number of rows returned."""
     count = _nested_value(item, "row_count")
     if count is not None:
         return count
@@ -180,6 +187,7 @@ def returned_row_count(item: dict[str, Any]) -> int | str:
 
 # region Function: Affected row count
 def affected_row_count(item: dict[str, Any]) -> int | str:
+    """Return the reported number of rows affected by a statement."""
     count = _nested_value(item, "rows_affected")
     return count if count is not None else ""
 # endregion Function: Affected row count
@@ -187,6 +195,7 @@ def affected_row_count(item: dict[str, Any]) -> int | str:
 
 # region Function: Result preview
 def result_preview(item: dict[str, Any], limit: int = 10) -> Any:
+    """Create a bounded preview of rows or other result data."""
     rows = _nested_value(item, "rows")
     if isinstance(rows, list):
         return rows[:limit]
@@ -197,6 +206,7 @@ def result_preview(item: dict[str, Any], limit: int = 10) -> Any:
 
 # region Function: Query identifier
 def query_identifier(item: dict[str, Any], index: int) -> str:
+    """Resolve a stable display identifier for one QA result."""
     for key in ("check_id", "query_id", "id", "name", "check", "request_id", "tool"):
         value = item.get(key)
         if value not in (None, ""):
@@ -207,6 +217,7 @@ def query_identifier(item: dict[str, Any], index: int) -> str:
 
 # region Function: Query profile
 def query_profile(item: dict[str, Any]) -> str:
+    """Return the safe database profile name associated with a result."""
     metadata = item.get("metadata")
     if isinstance(metadata, dict) and metadata.get("profile") not in (None, ""):
         return str(metadata["profile"])
@@ -216,6 +227,7 @@ def query_profile(item: dict[str, Any]) -> str:
 
 # region Function: Expected result
 def expected_result(item: dict[str, Any]) -> str:
+    """Normalize the expected QA outcome for reporting."""
     value = item.get("expected", item.get("expected_result", ""))
     return str(value) if value not in (None, "") else ""
 # endregion Function: Expected result
@@ -223,6 +235,7 @@ def expected_result(item: dict[str, Any]) -> str:
 
 # region Function: Actual result
 def actual_result(item: dict[str, Any]) -> str:
+    """Normalize the observed QA outcome for reporting."""
     value = item.get("actual", item.get("actual_result", ""))
     return str(value) if value not in (None, "") else ""
 # endregion Function: Actual result
@@ -230,10 +243,12 @@ def actual_result(item: dict[str, Any]) -> str:
 
 # region Function: Collect errors
 def collect_errors(payload: dict[str, Any], results: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Collect and normalize run-level and query-level errors."""
     errors: list[dict[str, str]] = []
 
     # region Function: Add error
     def add_error(error: Any, query: str = "Run") -> None:
+        """Append one normalized error unless it is empty."""
         if not error:
             return
         if isinstance(error, dict):
@@ -266,6 +281,7 @@ def collect_errors(payload: dict[str, Any], results: list[dict[str, Any]]) -> li
 
 # region Function: Build summary
 def build_summary(payload: dict[str, Any], results: list[dict[str, Any]], errors: list[dict[str, str]]) -> dict[str, Any]:
+    """Recompute trustworthy execution and QA status totals."""
     summary = payload.get("summary")
     safe_summary = dict(summary) if isinstance(summary, dict) else {}
     statuses = [query_status(item).strip().lower() for item in results]
@@ -316,6 +332,7 @@ def validate_report_payload(ticket_id: str, payload: dict[str, Any], *, require_
 
 # region Function: Json text
 def _json_text(value: Any) -> str:
+    """Serialize report values as stable, ASCII-safe JSON text."""
     return json.dumps(value, ensure_ascii=True, indent=2, default=str)
 # endregion Function: Json text
 
@@ -341,6 +358,7 @@ def _excel_cell(value: Any) -> Any:
 
 # region Function: Export html
 def export_html(ticket_id: str, payload: dict[str, Any], output_path: Path) -> None:
+    """Write a redacted and HTML-escaped ticket report atomically."""
     payload = redact_sensitive(payload)
     results = query_results(payload)
     errors = collect_errors(payload, results)
@@ -415,6 +433,7 @@ def export_html(ticket_id: str, payload: dict[str, Any], output_path: Path) -> N
 
 # region Function: Load openpyxl
 def load_openpyxl() -> tuple[Any, Any]:
+    """Load the optional Excel dependency with an actionable error."""
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Font
@@ -435,6 +454,7 @@ def export_excel(
     workbook_class: Any,
     font_class: Any,
 ) -> None:
+    """Write a redacted and formula-safe Excel ticket report atomically."""
     payload = redact_sensitive(payload)
     results = query_results(payload)
     errors = collect_errors(payload, results)
@@ -530,6 +550,7 @@ def export_excel(
 
 # region Function: Main
 def main() -> int:
+    """Run the result-export command-line interface."""
     parser = argparse.ArgumentParser(description="Export saved ticket-run execution results.")
     parser.add_argument("ticket_key", help="Jira ticket key, for example ABC-123")
     parser.add_argument(
@@ -544,7 +565,8 @@ def main() -> int:
     try:
         ticket_id = sanitize_ticket_key(args.ticket_key)
         run_folder = _safe_child(TICKET_RUNS_ROOT, ticket_id)
-        results_folder = _safe_child(run_folder, "execution_results")
+        generated_folder = _safe_child(run_folder, "generated")
+        results_folder = _safe_child(generated_folder, "execution_results")
         result_path = _safe_child(results_folder, "execution_result.json")
         payload = load_execution_result(result_path)
         validate_report_payload(ticket_id, payload, require_results=args.export_format != "json_only")
@@ -579,5 +601,7 @@ def main() -> int:
 # endregion Function: Main
 
 
+# region Command-line entry point
 if __name__ == "__main__":
     raise SystemExit(main())
+# endregion Command-line entry point
