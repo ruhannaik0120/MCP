@@ -8,8 +8,9 @@
 | Document purpose | Complete project explanation, product requirements, architecture, setup, operation, and future development guide |
 | Primary audience | New developers, QA engineers, technical leads, AI-agent operators, and project stakeholders |
 | Agent context entry point | `Basic_Instructions.md` |
-| Client workflow location | `skills/<clientname>_QA_workflow.md` |
-| Unsupported-work fallback | `skills/fallback.md` |
+| Client/project workflow location | `skills/workflows/` |
+| Non-active workflow template | `skills/workflows/clientname_project_qaworkflow.md` |
+| Reusable Agent Skill location | `skills/agent_skills/<skill-key>/SKILL.md` |
 | Database subsystem documentation | `docs/MCP.md` |
 | Current delivery model | Human-approved, AI-assisted QA workflow |
 
@@ -17,14 +18,14 @@
 
 The QA Automation project turns the requirements in a Jira ticket into a controlled QA validation run.
 
-An AI agent coordinates the process. It first reads the permanent project instructions, selects an exact client-specific workflow from `skills/`, and then performs only the ticket, approval, database, evidence, and reporting steps defined by that workflow. If the client or ticket type is unsupported or ambiguous, the agent follows the fallback instructions instead of inventing a process.
+An AI agent coordinates the process. It first reads the permanent project instructions, selects one exact approved and executable client/project workflow from `skills/workflows/`, and then performs only the steps defined by that workflow. A workflow may invoke reusable Agent Skills for specific stages. If routing information, workflow coverage, or a required skill is missing, ambiguous, or conflicting, the agent stops and requests authorized clarification instead of inventing a process.
 
 The project is deliberately divided into separate responsibilities:
 
 - **Atlassian MCP** provides Jira ticket information.
 - **The AI agent** coordinates the workflow and prepares QA artifacts.
-- **Client workflow skills** define the exact procedure for supported clients and ticket types.
-- **The fallback skill** stops and escalates unsupported or ambiguous work.
+- **Client/project workflows** define stable procedures for supported client, project, and optional variant combinations.
+- **Reusable Agent Skills** provide task-specific instructions for individual workflow stages.
 - **The human operator** approves important decisions and execution steps.
 - **The database MCP server in `MCP/`** provides controlled database access.
 - **Database connectors** translate common MCP operations into database-specific operations.
@@ -178,8 +179,9 @@ It is important to distinguish what exists now from what the complete product ma
 The repository currently includes:
 
 - permanent AI-agent orientation and repository-boundary instructions;
-- a client workflow template based on the tested E2E procedure;
-- explicit fallback instructions for unknown or unsupported work;
+- a reusable, non-active client/project workflow template;
+- separate locations for client/project workflows and reusable Agent Skills;
+- explicit stop-and-clarification behavior for unknown, ambiguous, conflicting, or unsupported work;
 - Atlassian MCP workspace configuration;
 - a reusable database MCP server;
 - named database profile handling;
@@ -203,7 +205,7 @@ The repository currently includes:
 
 The current system is AI-assisted rather than a single unattended application.
 
-The AI agent reads `Basic_Instructions.md` to recover its role and understand the repository. It then identifies and reads the exact `skills/<clientname>_QA_workflow.md` for the current ticket. If no exact workflow applies, it must follow `skills/fallback.md`. The outer workflow modules initialize folders and export saved data, but they do not select workflows, retrieve Jira tickets, or execute database queries themselves.
+The AI agent reads `Basic_Instructions.md` to recover its role, permanent boundaries, workflow-selection rules, and skill-resolution rules. It determines the client from authoritative ticket or user context, extracts the project type from the Jira title, and selects the exact approved and executable workflow under `skills/workflows/`. At the stage where a workflow references an exact `skill_key`, the agent resolves it to `skills/agent_skills/<skill-key>/SKILL.md`. The outer workflow modules initialize folders and export saved data, but they do not select workflows, resolve skills, retrieve Jira tickets, or execute database queries themselves.
 
 ### 7.3 Intended final development
 
@@ -211,7 +213,7 @@ The final working development should preserve the same boundaries while making t
 
 - one ticket-scoped working area per run;
 - one explicitly selected and approved client workflow per run;
-- controlled fallback instead of guessed behavior for unsupported work;
+- a controlled stop and request for authorized clarification instead of guessed behavior for unsupported work;
 - a clear boundary between external source files and generated workflow artifacts;
 - an authorized local-download fallback for inaccessible supporting content;
 - centralized logs;
@@ -243,8 +245,8 @@ Future interfaces may automate more coordination, but they must not remove these
                                |
                                v
                     +----------------------+
-                    | Client workflow skill|
-                    | or fallback/escalate |
+                    | Approved client and  |
+                    | project workflow     |
                     +---+--------------+---+
                         |              |
             Jira context|              |database tools
@@ -271,10 +273,9 @@ downloads/ + generated/ workspace          shared activity log    final reports
 | Component | Responsible for | Not responsible for |
 |---|---|---|
 | Human operator | Confirming client identity where needed, reviewing context, downloading protected source files through an authorized session, and making approvals required by the client workflow | Giving credentials to the agent or manually implementing every database connector operation |
-| AI agent | Recovering project context, selecting an exact client workflow, coordinating approved work, and using fallback when coverage is uncertain | Inventing workflow rules or bypassing approvals, credentials, and database permissions |
-| Client workflow skill | Defining supported ticket types, exact QA steps, approvals, systems, evidence, and outputs for one client | Overriding project-wide security and folder boundaries |
-| Task-specific agent skill | Teaching the agent how to perform a reusable specialized task or use a project capability | Selecting a client workflow or overriding its instructions |
-| Fallback skill | Stopping and escalating unknown, ambiguous, conflicting, or unsupported work | Acting as permission to continue with a guessed workflow |
+| AI agent | Recovering project context, selecting one exact approved client/project workflow, resolving its required skills, coordinating approved work, and stopping when routing or skill coverage is uncertain | Inventing workflow rules or bypassing approvals, credentials, and database permissions |
+| Client/project workflow | Defining stable procedures, approvals, systems, evidence, and outputs for one client, project, and optional workflow variant | Overriding project-wide security and folder boundaries or storing one ticket's generated state |
+| Reusable Agent Skill | Teaching the agent how to perform one reusable task at a workflow stage through an exact `skill_key` | Selecting which client/project workflow applies or overriding that workflow |
 | Atlassian MCP | Retrieving Jira context available to the authenticated user | Database execution or report generation |
 | Database MCP in `MCP/` | Profile operations, connection checks, metadata inspection, approved SQL execution | Jira interpretation, QA pass/fail decisions, or ticket report ownership |
 | Database connector | Database-specific connections, metadata SQL, timeouts, row limits, and execution | Workflow orchestration |
@@ -292,8 +293,9 @@ qa_automation/
 |   `-- mcp.json
 |-- Basic_Instructions.md
 |-- docs/
+|   |-- ADDING_AGENT_SKILLS.md
 |   |-- MCP.md
-|   `-- qa_automation.md
+|   `-- prd.md
 |-- MCP/
 |   |-- connectors/
 |   |-- models/
@@ -313,8 +315,13 @@ qa_automation/
 |   |-- init_ticket_run.py
 |   `-- export_results.py
 |-- skills/
-|   |-- QA_workflow_TEMPLATE.md
-|   `-- fallback.md
+|   |-- workflows/
+|   |   |-- clientname_project_qaworkflow.md
+|   |   `-- approved client/project workflows
+|   `-- agent_skills/
+|       `-- <skill-key>/
+|           |-- SKILL.md
+|           `-- optional supporting files
 |-- tests/
 |   `-- test_e2e_helpers.py
 |-- ticket_runs/
@@ -326,15 +333,17 @@ qa_automation/
 
 | Path | Purpose |
 |---|---|
-| `Basic_Instructions.md` | Permanent AI-agent role, repository map, folder contract, workflow-selection logic, safety boundaries, and context-recovery instructions. |
-| `docs/qa_automation.md` | This project-wide PRD and handoff document. |
+| `Basic_Instructions.md` | Permanent project-wide rules, repository boundaries, safety requirements, workflow-selection rules, skill-resolution rules, and context-recovery instructions. |
+| `docs/prd.md` | This project-wide PRD and handoff document. |
 | `docs/MCP.md` | Detailed documentation for the reusable database MCP subsystem. |
+| `docs/ADDING_AGENT_SKILLS.md` | AI-agnostic manual process for reviewing, installing, verifying, and updating reusable Agent Skills. |
 | `MCP/` | Database MCP implementation, connectors, services, tools, configuration, and tests. |
 | `ticket_runs/` | Ticket-scoped workspaces containing external inputs under `downloads/` and workflow artifacts under `generated/`. Generated ticket folders are not committed. |
 | `logs/` | Shared workflow and execution logs, one file per ticket run. |
 | `output/` | Final generated reports organized by ticket ID. |
 | `modules/` | Reusable outer-workflow Python modules for ticket initialization and result export. |
-| `skills/` | Exact client workflows, reusable task-specific agent skills, a non-executable workflow template, and fallback instructions. |
+| `skills/workflows/` | Stable client/project procedures plus the non-active `clientname_project_qaworkflow.md` authoring template. |
+| `skills/agent_skills/` | Reusable task-specific skill packages. Each package is named by its exact skill key and contains a required `SKILL.md` plus any optional supporting files. |
 | `tests/` | Tests for the outer workflow helpers. |
 | `ticket_run_config.json` | Machine-readable shared paths, statuses, formats, and baseline control definitions. |
 | `requirements-e2e.txt` | Outer workflow dependencies. It currently provides `openpyxl` for Excel export. |
@@ -415,71 +424,85 @@ This separation makes it clear which material came from outside the system and w
 
 HTML and Excel files are presentation outputs. They may summarize or format the evidence for a stakeholder. Keeping them under `output/<ticket-id>/` prevents a final report from being confused with source workflow state.
 
-## 11. Client-Selected QA Workflow
+## 11. Instruction And Workflow Architecture
 
-`Basic_Instructions.md` does not contain the exact ticket procedure. It tells the agent how to recover project context, understand folder ownership, and select the correct skill.
+The project separates permanent rules, client/project procedures, reusable task instructions, and ticket-specific state. Keeping these responsibilities separate prevents one ticket's details from becoming permanent behavior and prevents a reusable skill from selecting its own workflow.
 
-Every live run must use one exact, approved file named `skills/<clientname>_QA_workflow.md`. The repository's `skills/QA_workflow_TEMPLATE.md` preserves the initially tested E2E procedure as a customization starting point, but it is not an active workflow and must never be selected for a live ticket.
+| Layer | Location | Responsibility |
+|---|---|---|
+| Permanent project instructions | `Basic_Instructions.md` | Defines project-wide rules, repository boundaries, safety requirements, workflow-selection rules, skill-resolution rules, and context-recovery behavior. It does not contain one client's detailed ticket procedure. |
+| Client/project workflows | `skills/workflows/` | Defines stable procedures for one client, project type, and optional workflow variant. It may reference exact Agent Skills for individual stages. |
+| Reusable Agent Skills | `skills/agent_skills/<skill-key>/` | Defines reusable task-specific instructions in `SKILL.md`, with optional supporting material required by that skill. It does not select a client/project workflow. |
+| Ticket-specific inputs and state | `ticket_runs/<ticket-id>/` | Keeps external source documents under `downloads/` and AI-generated or workflow-generated artifacts under `generated/`. |
 
-If the client cannot be identified, an exact client workflow is absent, the ticket type is unsupported, or instructions conflict, the agent must open `skills/fallback.md`, stop client-specific work, and escalate to the project manager or designated QA workflow owner.
+### 11.1 Workflow Routing
 
-### 11.1 Workflow summary
+Completed workflows use one of these filenames:
+
+```text
+skills/workflows/<client-key>_<project-key>_qaworkflow.md
+skills/workflows/<client-key>_<project-key>_<workflow-variant-key>_qaworkflow.md
+```
+
+The second form is used only when one client and project combination has multiple approved workflows. Workflow routing is metadata-driven:
+
+1. Determine the client from authoritative ticket or user context.
+2. Extract the project type from the Jira ticket title, such as `edm`, `rms`, `poc`, or another supported project identifier.
+3. Match the authoritative client to `client_key` and the title's project type to `project_key`.
+4. Match `workflow_variant_key` when authoritative context requires a variant.
+5. Confirm that the candidate is active by requiring `document_type: qa_workflow`, `template: false`, `executable: true`, and `status: approved`.
+6. Use only the one workflow whose routing metadata matches exactly.
+
+The reusable template at `skills/workflows/clientname_project_qaworkflow.md` is non-active. It must be copied, completed, reviewed, and approved as a separately named workflow before use; the template itself must never be selected for a live ticket.
+
+If there is no exact match, multiple matches, missing routing metadata, unsupported work, conflicting instructions, or insufficient authoritative context, the agent stops before client-specific work and requests clarification from an authorized owner. It must not choose the closest-looking workflow or invent substitute behavior.
+
+The routing flow is:
 
 ```text
 Read Basic_Instructions.md
       |
       v
-Identify client and ticket type
+Determine client from authoritative context
       |
       v
-Exact approved client workflow available and applicable?
+Extract project type from the Jira title and variant when required
+      |
+      v
+Exact metadata match that is approved and executable?
       | Yes                         | No or uncertain
       v                             v
-Read complete client skill    Read skills/fallback.md
-      |                             |
-      v                             v
-Initialize ticket run         Stop and escalate
+Read complete workflow        Stop and request authorized clarification
       |
       v
-Retrieve authorized Jira context through Atlassian MCP
+Resolve each required Agent Skill at its declared workflow stage
       |
       v
-Identify Jira attachments and supporting links
+Follow only the selected workflow
       |
       v
-Agent cannot access a protected source? User downloads it to downloads/
-      |
-      v
-Review local source files and save generated/ticket_context.md
-      |
-      v
-HUMAN APPROVAL: context is complete
-      |
-      v
-Create generated/qa_plan.md and generated SQL
-      |
-      v
-HUMAN APPROVAL: SQL is approved
-      |
-      v
-HUMAN APPROVAL: target profile/system switch
-      |
-      v
-Execute each approved statement through database MCP
-      |
-      v
-Save and evaluate generated/execution_results/execution_result.json
-      |
-      v
-HUMAN APPROVAL: final export format
-      |
-      v
-Generate output/<ticket-id>/ reports
+Store external inputs in downloads/ and generated state in generated/
 ```
 
-The steps below document the tested reference process represented by `skills/QA_workflow_TEMPLATE.md`. An activated client workflow may add, remove, or refine workflow steps, but it cannot override the permanent security, credential, MCP, and folder boundaries in `Basic_Instructions.md`.
+### 11.2 Agent Skill Resolution
 
-### 11.2 Step 1: Initialize the run
+Each reusable Agent Skill has its own folder under `skills/agent_skills/`. Every skill package must contain `SKILL.md`. Depending on that skill's needs, the package may also contain supporting references, scripts, templates, assets, or examples.
+
+A workflow references a skill by an exact `skill_key`, which resolves to:
+
+```text
+skills/agent_skills/<skill-key>/SKILL.md
+```
+
+The workflow's `skill_key`, the `<skill-key>` folder name, and the `name` in the `SKILL.md` metadata must match exactly. The agent reads `SKILL.md`, uses supporting files only as that file directs, applies the skill only at the declared workflow stage, and then returns control to the selected workflow.
+
+Agent Skills do not determine the client, project type, workflow variant, or applicable workflow. Missing, ambiguous, unavailable, or conflicting required skills cause the agent to stop and request authorized clarification. The project uses explicit paths and metadata and does not depend on native skill discovery from Copilot, VS Code, or any other particular AI product.
+
+### 11.3 Optional QA Capability Sequence
+
+The remaining subsections document QA planning, database validation, approval, evidence, and reporting capabilities currently available in the repository. They are not one universal workflow and are not the default process for every client. The exact selected workflow decides which stages apply, their order, their required Agent Skills, and their approval checkpoints. A workflow does not need to use SQL, a database, a QA plan, or report export unless its approved procedure requires them, and no workflow may override the permanent security, credential, MCP, or folder boundaries in `Basic_Instructions.md`.
+
+### 11.4 Step 1: Initialize the run
 
 From the repository root:
 
@@ -502,7 +525,7 @@ The initializer:
 
 The initializer is idempotent. Running it again does not overwrite completed work.
 
-### 11.3 Step 2: Retrieve Jira and supporting context
+### 11.5 Step 2: Retrieve Jira and supporting context
 
 The user supplies a Jira ticket key. The AI agent uses Atlassian MCP to retrieve the ticket information visible to the authenticated Atlassian account.
 
@@ -522,7 +545,7 @@ If the agent cannot access a credential-protected link or attachment, it asks th
 
 The agent inventories supported files in `downloads/`, extracts relevant context, and notes any file it cannot safely read. The combined organized context is saved to `generated/ticket_context.md`, with downloaded filenames referenced where they support a requirement.
 
-### 11.4 Step 3: Approve ticket context
+### 11.6 Step 3: Approve ticket context
 
 The AI agent must stop and ask the user whether the saved context is complete enough for planning.
 
@@ -530,7 +553,7 @@ The user may approve it, add missing information, ask the agent to retrieve the 
 
 The decision is recorded in `generated/approvals/approval_log.md`.
 
-### 11.5 Step 4: Create the QA plan
+### 11.7 Step 4: Create the QA plan
 
 The AI agent converts the approved requirements into concrete checks.
 
@@ -546,7 +569,7 @@ Each check should identify:
 
 The plan is saved to `generated/qa_plan.md`.
 
-### 11.6 Step 5: Inspect metadata and prepare SQL
+### 11.8 Step 5: Inspect metadata and prepare SQL
 
 When schema details are uncertain, the agent should use database MCP metadata tools before writing SQL. It should inspect available databases, tables, and columns rather than guessing names.
 
@@ -554,13 +577,13 @@ Proposed SQL is saved to `generated/generated_sql/generated_queries.sql`. Every 
 
 Validation queries should normally be non-mutating. If DML or DDL is genuinely required, the agent must explain the effect and obtain explicit approval for that statement.
 
-### 11.7 Step 6: Approve SQL
+### 11.9 Step 6: Approve SQL
 
 The agent shows or references the proposed SQL and explains what every statement checks.
 
 No SQL may be executed until the user approves it. If an approved statement changes, the changed statement must be approved again.
 
-### 11.8 Step 7: Approve and switch database profiles
+### 11.10 Step 7: Approve and switch database profiles
 
 Every target database or environment is represented by a named profile.
 
@@ -573,7 +596,7 @@ Before switching profiles, the agent explains:
 
 The user must approve every system, environment, or profile switch.
 
-### 11.9 Step 8: Execute approved SQL
+### 11.11 Step 8: Execute approved SQL
 
 The agent sends one exact approved SQL statement per database MCP call.
 
@@ -586,7 +609,7 @@ It must not send:
 
 Each response is associated with its stable check ID and stored in `generated/execution_results/execution_result.json`.
 
-### 11.10 Step 9: Evaluate expected versus actual
+### 11.12 Step 9: Evaluate expected versus actual
 
 Database execution and QA evaluation are different states.
 
@@ -601,7 +624,7 @@ The agent compares the actual result with the expected result and assigns an exp
 | `executed_not_evaluated` | SQL ran successfully, but expected-versus-actual evaluation is incomplete. |
 | `execution_failed` | The SQL did not execute successfully. |
 
-### 11.11 Step 10: Correct and selectively rerun failures
+### 11.13 Step 10: Correct and selectively rerun failures
 
 If a query fails because of incorrect SQL, schema names, or column names:
 
@@ -614,7 +637,7 @@ If a query fails because of incorrect SQL, schema names, or column names:
 
 A successful retry must not erase the history of the earlier failure from the operational log.
 
-### 11.12 Step 11: Approve report output
+### 11.14 Step 11: Approve report output
 
 The user chooses one format:
 
@@ -627,7 +650,7 @@ The user chooses one format:
 
 HTML or Excel generation must not occur before the user chooses the format.
 
-### 11.13 Step 12: Export the report
+### 11.15 Step 12: Export the report
 
 Examples:
 
@@ -642,7 +665,7 @@ The exporter reads the saved JSON evidence. It does not call Jira, an MCP server
 
 ## 12. Reference Human Approval Requirements
 
-Each active client workflow must declare its exact approval checkpoints. The tested reference workflow in `skills/QA_workflow_TEMPLATE.md` uses the checkpoints below. A client workflow may add or refine checkpoints, but it cannot bypass MCP confirmations, database permissions, or permanent safety controls.
+Each active client/project workflow must declare its exact approval checkpoints. The checkpoints below are supported examples for workflows that use the documented QA and database capabilities; they are not automatically required by every workflow. A workflow may add or refine checkpoints, but it cannot bypass MCP confirmations, database permissions, or permanent safety controls.
 
 | Checkpoint | Required before | Evidence location |
 |---|---|---|
@@ -858,11 +881,12 @@ Reports can contain sensitive business data even when credentials are removed. U
 | FR-21 | Report generation shall redact credential-like values. |
 | FR-22 | The database layer shall support extension through additional connectors. |
 | FR-23 | The agent shall read `Basic_Instructions.md` when starting, resuming, or recovering context. |
-| FR-24 | Every active client workflow shall be stored as `skills/<clientname>_QA_workflow.md`. |
-| FR-25 | The agent shall confirm that the selected client workflow covers the current ticket type before performing client-specific work. |
-| FR-26 | The agent shall follow `skills/fallback.md` when workflow selection or coverage is missing, ambiguous, conflicting, or unsupported. |
-| FR-27 | `skills/QA_workflow_TEMPLATE.md` shall remain a non-executable template until customized, renamed, and approved for a client. |
-| FR-28 | The `skills/` folder shall support reusable task-specific agent skills that remain subordinate to the permanent instructions and selected client workflow. |
+| FR-24 | Every active workflow shall be stored under `skills/workflows/` using `<client-key>_<project-key>_qaworkflow.md` or, when required, `<client-key>_<project-key>_<workflow-variant-key>_qaworkflow.md`. |
+| FR-25 | The agent shall route by authoritative client context, the project type in the Jira title, and an optional authoritative workflow variant, then require one exact metadata match. |
+| FR-26 | The agent shall use only a workflow with `document_type: qa_workflow`, `template: false`, `executable: true`, and `status: approved`; missing, ambiguous, conflicting, or unsupported routing shall stop for authorized clarification. |
+| FR-27 | `skills/workflows/clientname_project_qaworkflow.md` shall remain a non-active authoring template and shall never be selected for a live ticket. |
+| FR-28 | Every reusable Agent Skill shall be stored under `skills/agent_skills/<skill-key>/` with a required `SKILL.md` and optional skill-specific supporting files. |
+| FR-29 | A workflow's `skill_key`, its skill folder name, and the `SKILL.md` metadata name shall match exactly; missing or conflicting required skills shall stop the workflow for clarification. |
 
 ## 19. Non-Functional Requirements
 
@@ -876,7 +900,7 @@ Every check should be traceable from requirement to QA plan, proposed SQL, appro
 
 ### 19.3 Maintainability
 
-Permanent agent instructions, client workflow skills, fallback behavior, workflow modules, MCP tools, services, validation, and database connectors must remain separated. Client workflow changes should not require MCP changes, and a new connector should not require rewriting the permanent agent instructions.
+Permanent project instructions, client/project workflows, reusable Agent Skills, ticket-generated state, workflow modules, MCP tools, services, validation, and database connectors must remain separated. Workflow or skill changes should not require MCP changes, and a new connector should not require rewriting the permanent project instructions.
 
 Every source file must preserve the collapsible code-documentation convention: labeled module setup, class, function, entry-point, and nontrivial internal sections; purpose-specific module/class/function docstrings; and balanced regions. `tests/test_code_documentation.py` enforces the structural parts of this convention.
 
@@ -968,34 +992,35 @@ The verification pipeline compiles tracked Python files, runs MCP tests, runs an
 
 The repository intentionally ships with a non-executable template rather than an assumed client procedure. Before a live run:
 
-1. Copy `skills/QA_workflow_TEMPLATE.md` to `skills/<clientname>_QA_workflow.md`.
-2. Replace the template fields and reference steps with confirmed client requirements.
-3. Define supported ticket types and every condition that must route to fallback.
-4. Obtain approval from the project manager or designated QA workflow owner.
-5. Test both a supported ticket and an unsupported ticket before using live systems.
+1. Copy `skills/workflows/clientname_project_qaworkflow.md` to `skills/workflows/<client-key>_<project-key>_qaworkflow.md`, adding `_<workflow-variant-key>` before `_qaworkflow.md` only when multiple workflows exist for the same client and project.
+2. Replace every template field and section with confirmed, stable client/project requirements rather than one ticket's details.
+3. Set exact routing metadata and reference any required or optional Agent Skills by their exact `skill_key`.
+4. After review, activate the completed copy with `document_type: qa_workflow`, `template: false`, `executable: true`, and `status: approved` plus the required approval metadata.
+5. Test exact supported routing and no-match, ambiguous, unsupported, and missing-skill cases before using live systems.
 
-Do not rename the template itself or use it directly for a live ticket.
+Do not rename, activate, or use the template itself for a live ticket.
 
 ## 21. Normal Operating Procedure
 
 1. Read `Basic_Instructions.md` completely.
-2. Establish the ticket ID, client identity, and ticket type from authoritative information.
-3. Find an exact `skills/<clientname>_QA_workflow.md` and verify that it covers the ticket type.
-4. If selection or coverage is uncertain, open `skills/fallback.md`, stop, and escalate.
-5. Read the selected client workflow completely and state which workflow is active.
-6. Confirm the tools and systems required by that workflow are available.
-7. Initialize and use the ticket workspace according to the shared folder contract.
-8. Follow the selected client workflow's exact context, planning, approval, execution, evaluation, and output steps.
-9. Keep external inputs, generated artifacts, logs, and final reports in their assigned locations.
-10. On context loss, repeat workflow selection and verify the last approved state before continuing.
+2. Establish the ticket ID and determine the client from authoritative ticket or user context.
+3. Extract the project type from the Jira title and identify an authoritative workflow variant only when required.
+4. Select one exact metadata match under `skills/workflows/` and confirm it is approved and executable.
+5. If routing is missing, ambiguous, conflicting, or unsupported, stop and request clarification from an authorized owner.
+6. Read the selected workflow completely and state which workflow is active.
+7. Resolve each required `skill_key` to `skills/agent_skills/<skill-key>/SKILL.md` at its declared stage, stopping if a required skill is missing or conflicting.
+8. Confirm the tools and systems required by the workflow and its skills are available.
+9. Initialize and use the ticket workspace according to the shared folder contract.
+10. Follow only the selected workflow's exact stages and approval checkpoints.
+11. Keep external inputs, generated artifacts, logs, and final reports in their assigned locations.
+12. On context loss, repeat workflow selection and verify the last approved state before continuing.
 
 ## 22. Error Handling And Recovery
 
 ### 22.1 The client workflow is unknown or unsupported
 
-- Open `skills/fallback.md`.
 - Stop before client-specific planning, SQL generation or execution, profile switching, and final report generation.
-- Identify the unresolved client, ticket type, keyword, conflict, or missing context.
+- Identify the unresolved client, project type, workflow variant, metadata conflict, skill conflict, or missing authoritative context.
 - Contact the project manager or designated QA workflow owner.
 - Do not use the closest-looking workflow or the workflow template as a substitute.
 
@@ -1112,21 +1137,28 @@ Any client that supports the required MCP transports can use the project if it c
 
 To onboard a client:
 
-1. Copy `skills/QA_workflow_TEMPLATE.md` to `skills/<clientname>_QA_workflow.md` using the approved client identifier.
-2. Define authoritative client-identification rules, supported Jira projects, ticket types, and routing keywords.
-3. Replace template assumptions with the client's required context, systems, checks, approvals, evidence, reports, and escalation contacts.
-4. Confirm that the workflow respects `Basic_Instructions.md` and does not embed client logic inside `MCP/` or `modules/`.
-5. Have the project manager or designated QA workflow owner approve the workflow before activation.
-6. Test the client workflow against representative non-production tickets, including at least one unsupported case that must route to `skills/fallback.md`.
+1. Copy `skills/workflows/clientname_project_qaworkflow.md` to the appropriate `<client-key>_<project-key>_qaworkflow.md` or `<client-key>_<project-key>_<workflow-variant-key>_qaworkflow.md` path under `skills/workflows/`.
+2. Define exact `client_key`, `project_key`, and optional `workflow_variant_key` routing metadata from authoritative client/project rules.
+3. Replace template prompts with stable client/project requirements for context, systems, stages, approvals, evidence, reports, and escalation contacts.
+4. Reference reusable capabilities through exact skill keys whose packages exist under `skills/agent_skills/<skill-key>/`.
+5. Confirm that the workflow respects `Basic_Instructions.md` and does not embed client logic inside `MCP/` or `modules/`.
+6. Have the designated QA workflow owner approve the completed workflow before setting it active and executable.
+7. Test the workflow against representative non-production tickets, including exact-match, no-match, ambiguous-routing, unsupported, and required-skill failure cases.
 
 Never make the template itself active, and never create a client workflow by guessing from one ticket.
+
+### 24.6 Adding an Agent Skill
+
+Create one folder at `skills/agent_skills/<skill-key>/` and add its required `SKILL.md`. The workflow's `skill_key`, folder name, and `SKILL.md` metadata name must match exactly. Add references, scripts, templates, assets, or examples only when that skill needs them, and document from `SKILL.md` how they are used.
+
+An Agent Skill should teach one reusable task and remain limited to the workflow stage that invokes it. It must not contain client/project routing logic, select a workflow, override `Basic_Instructions.md`, or store ticket-specific information. The project resolves skills by explicit path and metadata, so a skill must work without relying on product-specific native discovery.
 
 ## 25. Known Boundaries And Limitations
 
 - The AI agent currently coordinates the workflow; there is no standalone workflow dashboard.
 - Client workflow selection currently depends on authoritative user or ticket context; there is no central client-routing service.
-- The repository contains a workflow template but no active client workflow until an approved `<clientname>_QA_workflow.md` is added.
-- The fallback escalation owner is temporarily the project manager or designated QA workflow owner and may be refined later.
+- The repository contains a non-active workflow template; a workflow becomes usable only after a separately named copy has complete routing metadata and explicit approval.
+- Missing, ambiguous, conflicting, or unsupported routing and required-skill problems require clarification from the project manager or designated QA workflow owner.
 - Jira retrieval depends on Atlassian authentication and account permissions.
 - The agent may be unable to open credential-protected external links referenced by Jira. An authorized user must download that content to the ticket's `downloads/` folder when it is needed for the run.
 - Live database execution depends on network access, drivers, profile configuration, and database permissions.
@@ -1148,8 +1180,8 @@ The complete project is considered ready for a controlled ticket run when:
 4. The demo connector passes without live credentials.
 5. Required live database profiles report ready before use.
 6. `Basic_Instructions.md` can restore the agent's project role and folder relationships without prescribing one client's exact procedure.
-7. An exact approved client workflow can be identified and verified against the current ticket type.
-8. Unknown, ambiguous, conflicting, and unsupported work routes to `skills/fallback.md` without client-specific execution.
+7. An exact approved and executable client/project workflow can be selected by authoritative client context, the Jira title's project type, and an optional workflow variant.
+8. Unknown, ambiguous, conflicting, and unsupported routing or required-skill problems stop for authorized clarification without client-specific execution.
 9. A ticket ID creates `ticket_runs/<ticket-id>/downloads/` and `ticket_runs/<ticket-id>/generated/` with the documented generated-artifact structure.
 10. Inaccessible supporting sources can be supplied through an authorized local download without exposing credentials to the agent.
 11. External source files remain under `downloads/`, and all workflow-produced ticket artifacts remain under `generated/`.
@@ -1172,13 +1204,13 @@ Before handing the project to another developer or team:
 3. Run `MCP/scripts/verify.ps1`.
 4. Confirm `.vscode/mcp.json` uses repository-relative paths.
 5. Confirm `Basic_Instructions.md` describes permanent agent behavior and does not contain one client's detailed procedure.
-6. Confirm every active client file follows `skills/<clientname>_QA_workflow.md`, declares supported ticket types, and has an approved workflow owner.
-7. Confirm `skills/QA_workflow_TEMPLATE.md` is clearly marked non-executable and `skills/fallback.md` names the current escalation route.
+6. Confirm every active workflow under `skills/workflows/` follows the filename convention, has exact routing metadata, and is approved and executable.
+7. Confirm `skills/workflows/clientname_project_qaworkflow.md` remains non-active and every referenced required Agent Skill resolves exactly under `skills/agent_skills/`.
 8. Confirm `ticket_run_config.json` matches the documented shared artifact paths and baseline controls.
 9. Confirm generated ticket runs, logs, and outputs are not committed.
 10. Give the recipient this document for the project overview.
 11. Give the recipient `MCP.md` for database subsystem setup and extension details.
-12. Demonstrate workflow selection, one fallback case, and one offline MCP demo before connecting to live systems.
+12. Demonstrate exact workflow selection, one stop-and-clarification case, required-skill resolution, and one offline MCP demo before connecting to live systems.
 
 ## 28. Glossary
 
@@ -1187,12 +1219,12 @@ Before handing the project to another developer or team:
 | AI agent | The AI client coordinating the QA workflow and using MCP tools. |
 | Approval checkpoint | A required pause where a human authorizes the next action. |
 | Artifact | A file produced or updated during a ticket run. |
-| Agent skill | Reusable instructions for performing a specific task or using a project capability; it does not select or replace a client workflow. |
-| Client workflow | An approved `skills/<clientname>_QA_workflow.md` defining the exact supported QA procedure for one client. |
+| Agent Skill | Reusable task-specific instructions stored at `skills/agent_skills/<skill-key>/SKILL.md`; it supports a workflow stage but does not select or replace a client/project workflow. |
+| Client/project workflow | An approved and executable file under `skills/workflows/` defining stable procedures for one client, project type, and optional workflow variant. |
 | Connector | Database-specific implementation behind the common MCP interface. |
 | Downloads | External source files associated with a ticket, including authorized local copies of inaccessible attachments or linked documents. |
 | Execution success | Confirmation that a SQL statement ran, not that the QA expectation passed. |
-| Fallback | A controlled stop-and-escalate procedure used when workflow selection or coverage is uncertain. |
+| Workflow routing | Exact matching of authoritative client, Jira-title project type, and optional workflow variant against approved workflow metadata. |
 | Generated artifacts | Ticket-scoped files produced by the AI agent, initializer, or QA workflow. |
 | Jira context | Ticket information used to understand and plan QA validation. |
 | MCP | Model Context Protocol, used by AI clients to discover and call tools. |
@@ -1205,10 +1237,10 @@ Before handing the project to another developer or team:
 
 Use the project documentation in this order:
 
-1. **`docs/qa_automation.md`** - understand the complete product, architecture, requirements, setup, and design.
+1. **`docs/prd.md`** - understand the complete product, architecture, requirements, setup, and design.
 2. **`Basic_Instructions.md`** - restore the agent's role, repository relationships, permanent boundaries, and workflow-selection behavior.
-3. **`skills/<clientname>_QA_workflow.md`** - follow the exact approved procedure for the identified client and supported ticket type.
-4. **`skills/fallback.md`** - stop and escalate when the workflow is missing, ambiguous, conflicting, or unsupported.
-5. **`skills/QA_workflow_TEMPLATE.md`** - create and approve a new client workflow; never use the template directly for a live run.
+3. **`skills/workflows/<client-key>_<project-key>[_<workflow-variant-key>]_qaworkflow.md`** - follow the one exact approved and executable workflow selected through authoritative routing context and metadata.
+4. **`skills/agent_skills/<skill-key>/SKILL.md`** - follow reusable task instructions only when the selected workflow invokes that exact skill key.
+5. **`skills/workflows/clientname_project_qaworkflow.md`** - author a new client/project workflow from a non-active template; never use the template directly for a live run.
 6. **`docs/MCP.md`** - configure, operate, troubleshoot, and extend the database MCP subsystem.
 7. **`ticket_run_config.json`** - inspect the machine-readable shared paths, statuses, formats, and baseline controls.

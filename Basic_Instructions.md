@@ -4,9 +4,9 @@
 
 This is the first project file an AI agent must read when starting work, resuming work, or recovering after losing conversation context.
 
-This file defines the agent's role, the repository structure, permanent safety boundaries, and how to select the correct client-specific QA workflow. It does not define one universal QA procedure. Exact workflow steps belong in `skills/<clientname>_QA_workflow.md` because different clients may use different ticket types, approvals, systems, evidence, and reports.
+This file defines the agent's role, the repository structure, permanent safety boundaries, and how to select the correct client/project QA workflow. It does not define one universal QA procedure. Exact workflow steps belong in approved files under `skills/workflows/` because different clients and project types may use different ticket types, approvals, systems, evidence, and reports.
 
-If a client workflow cannot be identified or does not cover the request, the agent must open `skills/fallback.md` and follow it. The agent must never invent missing workflow rules.
+If an exact approved workflow cannot be identified or does not cover the request, the agent must stop, explain what is missing or ambiguous, and request clarification from an authorized user. The agent must never invent missing workflow or fallback behavior.
 
 ## Agent Role
 
@@ -20,7 +20,7 @@ The agent must:
 - keep files inside their documented ownership boundaries;
 - preserve existing user files and generated evidence;
 - stop at every approval or escalation point required by the selected workflow;
-- use `skills/fallback.md` whenever the correct action is uncertain; and
+- stop and request authorized clarification whenever the correct action cannot be proven; and
 - explain what information or authorization is missing instead of guessing.
 
 The agent must not modify `MCP/` during a QA run. `MCP/` is the reusable database subsystem and may be changed only when the user explicitly requests MCP development work.
@@ -31,8 +31,8 @@ Use project instructions in this order:
 
 1. Follow platform, security, and organization policies.
 2. Follow this file's permanent project boundaries.
-3. Follow the confirmed `skills/<clientname>_QA_workflow.md` for the current run.
-4. If the workflow is missing, ambiguous, unsupported, or conflicting, follow `skills/fallback.md`.
+3. Follow the exact approved client/project workflow selected from `skills/workflows/` for the current run.
+4. If the workflow is missing, ambiguous, unsupported, or conflicting, stop, explain the problem, and request clarification from an authorized user.
 
 A client workflow may add stricter controls but must not override security requirements, credential protections, folder ownership, or MCP boundaries in this file.
 
@@ -45,6 +45,8 @@ qa_automation/
 |-- MCP/
 |-- modules/
 |-- skills/
+|   |-- workflows/
+|   `-- agent_skills/
 |-- tests/
 |-- ticket_runs/
 |-- logs/
@@ -59,7 +61,8 @@ qa_automation/
 | `docs/` | Human-facing project and MCP documentation. Use it for architecture and setup context, not as a substitute for a client workflow. |
 | `MCP/` | Reusable database MCP server. Use its tools during approved QA work; do not place ticket logic or run artifacts here. |
 | `modules/` | Reusable Python modules for ticket initialization and result export. Do not place client-specific workflow instructions here. |
-| `skills/` | Client-specific QA workflows, reusable task-specific agent skill files, the workflow template, and fallback instructions. |
+| `skills/workflows/` | Contains the reusable non-active workflow template and approved client/project workflow files. |
+| `skills/agent_skills/` | Contains reusable Agent Skill packages. Each skill has its own `<skill-key>/` folder containing `SKILL.md` and, when required, supporting `references/`, `scripts/`, `templates/`, or `assets/` folders. |
 | `tests/` | Automated regression tests for the outer QA workflow modules. Do not store ticket evidence here. |
 | `ticket_runs/` | One local working area per ticket. Contains external inputs and generated workflow artifacts. |
 | `logs/` | Shared operational logs, normally one log per ticket ID. This is the only workflow log location. |
@@ -111,34 +114,63 @@ Do not place external source documents, shared logs, or final reports in `genera
 
 Before performing client-specific QA work:
 
-1. Determine the ticket ID, client identity, and ticket type from authoritative user input or authorized ticket context.
-2. Look for an exact client workflow named `skills/<clientname>_QA_workflow.md`.
-3. Confirm that the workflow identifies the current ticket type or explicitly says it supports it.
-4. Read the complete workflow before creating plans, SQL, approvals, evidence, or reports.
-5. State which workflow was selected and why.
-6. Follow only that workflow for the run unless the user or designated workflow owner explicitly changes it.
+1. Determine the client from authoritative ticket or user context.
+2. Extract the project type, such as `edm`, `rms`, or `poc`, from the Jira ticket title.
+3. Match the authoritative client identity to the workflow metadata `client_key`.
+4. Match the extracted project type to the workflow metadata `project_key`.
+5. When an additional routing distinction is required, determine it from authoritative ticket or user context and match it to `workflow_variant_key`.
+6. Confirm that the candidate workflow metadata has `document_type: qa_workflow`, `template: false`, `executable: true`, and `status: approved`.
+7. Read the complete workflow, state which exact workflow was selected and why, and follow only that workflow for the run unless an authorized user or designated workflow owner explicitly changes it.
 
-Do not select a workflow merely because its name or content looks similar. Do not treat `skills/QA_workflow_TEMPLATE.md` as an active client workflow.
+Approved workflow filenames use:
 
-Open and follow `skills/fallback.md` when:
+```text
+skills/workflows/<client-key>_<project-key>_qaworkflow.md
+skills/workflows/<client-key>_<project-key>_<workflow-variant-key>_qaworkflow.md
+```
 
-- the client cannot be identified reliably;
-- no exact client workflow exists;
-- more than one workflow could apply;
-- the ticket type, keyword, request, or system is not covered;
-- required instructions or context are missing;
-- the client workflow conflicts with this file or another authoritative instruction; or
-- the agent is otherwise uncertain whether the workflow applies.
+Examples:
 
-## Using Task-Specific Agent Skills
+```text
+skills/workflows/exampleclient_edm_qaworkflow.md
+skills/workflows/exampleclient_rms_qaworkflow.md
+skills/workflows/internal_poc_qaworkflow.md
+skills/workflows/exampleclient_edm_reconciliation_qaworkflow.md
+```
 
-The `skills/` folder may also contain reusable instructions that teach the agent how to perform a specific kind of task or use a project capability. These are supporting agent skills, not client workflows.
+The reusable file `skills/workflows/clientname_project_qaworkflow.md` is a non-active template and must never be selected for a live ticket.
 
-- Use a task-specific skill when the selected client workflow references it or when it clearly applies to an approved task.
-- A task-specific skill may explain how to perform an operation, but it does not decide which client workflow applies.
-- A task-specific skill must not override this file, the selected client workflow, fallback behavior, security controls, or folder ownership.
-- If a required skill is missing, ambiguous, or conflicts with the client workflow, stop and follow `skills/fallback.md`.
-- Keep reusable skills client-neutral unless the file is intentionally named and approved as a client workflow.
+Do not select a workflow merely because its filename or contents appear similar. Stop, explain what is missing or ambiguous, and request clarification from an authorized user when:
+
+- no exact workflow exists;
+- multiple workflows match;
+- routing metadata is missing;
+- the ticket type is unsupported;
+- workflow instructions conflict;
+- required context is unavailable; or
+- the correct action cannot be proven.
+
+Do not invent fallback behavior.
+
+## Resolving Agent Skills
+
+Reusable Agent Skills are stored at:
+
+```text
+skills/agent_skills/<skill-key>/SKILL.md
+```
+
+The workflow `skill_key`, the Agent Skill folder name, and the `name` field inside `SKILL.md` must match exactly.
+
+Before using a required Agent Skill:
+
+1. Locate the exact `skills/agent_skills/<skill-key>/SKILL.md` path.
+2. Read the complete `SKILL.md`.
+3. Read supporting files only when `SKILL.md` references or requires them.
+4. Follow the skill only for the workflow stage that requested it.
+5. Return control to the selected workflow after completing the skill task.
+
+An Agent Skill supports a workflow but does not determine which client/project workflow applies. If a required skill is missing, ambiguous, unavailable, or conflicts with this file, the agent must stop and explain the problem instead of substituting another skill.
 
 ## Tool And System Boundaries
 
@@ -151,7 +183,7 @@ The `skills/` folder may also contain reusable instructions that teach the agent
 
 ## Permanent Safety Rules
 
-- Do not hallucinate ticket context, client rules, expected results, approvals, database structure, or fallback decisions.
+- Do not hallucinate ticket context, client rules, expected results, approvals, database structure, routing decisions, or escalation behavior.
 - Do not continue when the applicable client workflow is unknown or unsupported.
 - Do not execute SQL or switch database profiles without every approval required by the selected workflow and MCP tool contract.
 - Do not automatically rewrite and rerun failed SQL unless the selected workflow permits it and required approval is obtained again.
@@ -182,16 +214,16 @@ If the agent loses all conversational context:
 3. Re-establish the ticket ID and client identity from authoritative context.
 4. Select and read the exact client workflow again.
 5. Review existing ticket artifacts, logs, and approvals to determine the last confirmed state.
-6. Use `skills/fallback.md` if the workflow or safe continuation point cannot be proven.
+6. Stop, explain the uncertainty, and request clarification from an authorized user if the workflow or safe continuation point cannot be proven.
 7. Never assume that an action was approved merely because an artifact exists.
 
 ## Changing Agent Behavior
 
-Project-wide folder relationships, safety boundaries, and workflow-selection behavior belong in this file. Client-specific behavior belongs in that client's `skills/<clientname>_QA_workflow.md`.
+Project-wide folder relationships, safety boundaries, and workflow-selection behavior belong in this file. Client/project-specific behavior belongs in approved workflow files under `skills/workflows/`.
 
 When requirements change:
 
 - update this file only for rules that apply to every client;
 - update the relevant client workflow for client-specific steps;
-- update `skills/fallback.md` for organization-wide escalation behavior; and
-- keep `docs/qa_automation.md` synchronized as the human-facing project explanation.
+- request authorized clarification when no approved instruction defines organization-wide escalation behavior; and
+- keep `docs/prd.md` synchronized as the human-facing project explanation.

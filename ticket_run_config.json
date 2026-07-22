@@ -8,10 +8,27 @@
     "generated": "generated"
   },
   "workflow_routing": {
-    "skills_root": "skills",
-    "client_workflow_pattern": "<clientname>_QA_workflow.md",
-    "template": "QA_workflow_TEMPLATE.md",
-    "fallback": "fallback.md"
+    "workflows_root": "skills/workflows",
+    "workflow_file_patterns": [
+      "<client-key>_<project-key>_qaworkflow.md",
+      "<client-key>_<project-key>_<workflow-variant-key>_qaworkflow.md"
+    ],
+    "template": "skills/workflows/clientname_project_qaworkflow.md",
+    "active_metadata": {
+      "document_type": "qa_workflow",
+      "template": false,
+      "executable": true,
+      "status": "approved"
+    }
+  },
+  "agent_skill_resolution": {
+    "skills_root": "skills/agent_skills",
+    "instruction_file": "SKILL.md",
+    "identifier_contract": [
+      "workflow skill_key",
+      "skill folder name",
+      "SKILL.md metadata name"
+    ]
   },
   "stable_artifact_paths": {
     "ticket_context": "generated/ticket_context.md",
