@@ -13,12 +13,12 @@ Every installed Agent Skill must have its own folder under `skills/agent_skills/
 ```text
 skills/
 `-- agent_skills/
-    `-- <skill-key>/
+    `-- <skill-name>/
         |-- SKILL.md
         `-- optional supporting files
 ```
 
-`<skill-key>` is the skill's exact identifier. Do not place unrelated skills in the same folder or place a `SKILL.md` directly in `skills/agent_skills/`.
+`<skill-name>` is the skill's exact identifier. Do not place unrelated skills in the same folder or place a `SKILL.md` directly in `skills/agent_skills/`.
 
 ## Locating the Skill Package
 
@@ -66,11 +66,11 @@ Use this installation rule:
 
 The following values must match exactly:
 
-1. The workflow `skill_key`.
+1. The checklist item's **Required Agent Skill** value.
 2. The skill folder name.
 3. The `name` field inside the `SKILL.md` metadata.
 
-Example workflow skill key:
+Example checklist value:
 
 ```text
 qa-test-planner
@@ -139,7 +139,7 @@ Before referencing a newly installed skill from a workflow, verify it independen
 ```text
 Read and follow:
 
-skills/agent_skills/<skill-key>/SKILL.md
+skills/agent_skills/<skill-name>/SKILL.md
 
 Before performing the task, confirm:
 
@@ -157,22 +157,20 @@ A successful test shows that the agent can locate the exact path, read the skill
 
 ## Workflow Integration
 
-After standalone verification and the required review, an approved client/project workflow may reference the skill by its exact `skill_key`:
+After standalone verification and the required review, an approved client/project workflow may reference the skill directly inside the checklist item that needs it:
 
-```yaml
-required_skills:
-  - skill_key: qa-test-planner
-    workflow_stage: qa-planning
-    required: true
+```text
+1. **Checklist item:** `qa-planning`
+   - **Required Agent Skill:** `qa-test-planner`
 ```
 
-This key resolves to:
+The checklist value resolves to:
 
 ```text
 skills/agent_skills/qa-test-planner/SKILL.md
 ```
 
-The workflow uses the skill only at the declared stage and remains responsible for the client/project procedure. The skill does not select the workflow. No native discovery configuration for a particular AI product is required or defined by this project structure.
+The workflow uses the skill only for that checklist item and remains responsible for the client/project procedure. Control returns to the workflow checklist when the skill finishes. Agent Skills are not declared in workflow YAML metadata, and the skill does not select the workflow. No native discovery configuration for a particular AI product is required or defined by this project structure.
 
 ## Updating or Replacing a Skill
 
@@ -183,7 +181,7 @@ Before updating or replacing an installed skill:
 3. Recheck scripts, commands, external URLs, tools, and dependencies.
 4. Confirm that the metadata `name` has not changed unexpectedly.
 5. Repeat the standalone skill verification with a small fictional task.
-6. Confirm that existing workflows still reference the correct exact `skill_key`.
+6. Confirm that existing checklist items still use the correct exact **Required Agent Skill** value.
 
 Do not overwrite an approved skill package without review. Preserve the current approved version until the replacement has passed review and testing according to the project's change-control requirements.
 
@@ -194,10 +192,10 @@ Do not overwrite an approved skill package without review. Preserve the current 
 | The wrong repository root is open | Confirm the active repository contains this project's `Basic_Instructions.md`, `skills/`, and `ticket_runs/` paths. |
 | The skill was copied into the wrong `skills` folder | Confirm the destination begins at this repository's `skills/agent_skills/`. |
 | `SKILL.md` is missing or incorrectly named | Confirm the filename is exactly `SKILL.md` and is directly inside the skill folder. |
-| The folder name does not match the metadata name | Compare the workflow `skill_key`, folder name, and `SKILL.md` metadata `name` character for character. |
+| The folder name does not match the metadata name | Compare the checklist item's **Required Agent Skill** value, folder name, and `SKILL.md` metadata `name` character for character. |
 | Referenced supporting files were not copied | Review every relative reference in `SKILL.md` and restore the required files from the reviewed source package. |
 | Relative paths are broken | Confirm the copied package preserved its internal folder relationships and path capitalization. |
 | The skill requires explicit invocation | Read its activation instructions and invoke it exactly as documented. |
 | Scripts require unavailable tools | Review the declared runtimes and dependencies; do not install or execute them without authorization. |
 | The skill conflicts with project-wide instructions | Stop using the skill. `Basic_Instructions.md` takes precedence, and an authorized owner must resolve the conflict. |
-| The agent reports only a filename | Require confirmation of the complete project path: `skills/agent_skills/<skill-key>/SKILL.md`. |
+| The agent reports only a filename | Require confirmation of the complete project path: `skills/agent_skills/<skill-name>/SKILL.md`. |

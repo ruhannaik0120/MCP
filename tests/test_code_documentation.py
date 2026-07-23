@@ -43,6 +43,26 @@ def _definition_nodes(tree: ast.AST) -> list[ast.AST]:
 # endregion Function: Definition nodes
 
 
+# region Function: Executable entry-point nodes
+def _entry_point_nodes(tree: ast.Module) -> list[ast.If]:
+    """Return module-level guards that execute a Python file as a command."""
+
+    return [
+        node
+        for node in tree.body
+        if isinstance(node, ast.If)
+        and isinstance(node.test, ast.Compare)
+        and isinstance(node.test.left, ast.Name)
+        and node.test.left.id == "__name__"
+        and len(node.test.ops) == 1
+        and isinstance(node.test.ops[0], ast.Eq)
+        and len(node.test.comparators) == 1
+        and isinstance(node.test.comparators[0], ast.Constant)
+        and node.test.comparators[0].value == "__main__"
+    ]
+# endregion Function: Executable entry-point nodes
+
+
 # region Function: Region immediately precedes
 def _region_immediately_precedes(node: ast.AST, lines: list[str]) -> bool:
     """Check for a nearby region marker before a definition or its decorators."""
@@ -76,6 +96,11 @@ def test_python_code_documentation_convention(path: Path):
         assert ast.get_docstring(node), f"Missing docstring for {node.name} in {path}:{node.lineno}"
         assert _region_immediately_precedes(node, lines), (
             f"Missing collapsible region for {node.name} in {path}:{node.lineno}"
+        )
+
+    for node in _entry_point_nodes(tree):
+        assert _region_immediately_precedes(node, lines), (
+            f"Missing collapsible region for executable entry point in {path}:{node.lineno}"
         )
 # endregion Function: Test Python code documentation convention
 
