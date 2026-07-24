@@ -141,6 +141,7 @@ def initialize_run(
         with log_path.open("x", encoding="utf-8", newline="\n") as file:
             file.write(f"{created_at} | Run folder initialized | Success\n")
     except FileExistsError:
+        # Preserve existing run history when initialization is repeated.
         pass
     else:
         created.append(log_path)

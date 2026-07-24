@@ -1,24 +1,13 @@
 ---
 document_type: "qa_workflow_template"
-template: true
-executable: false
-client_key: "<client-key>"
-project_key: "<project-key>"
-workflow_variant_key: null
-workflow_key: "<unique-workflow-key>"
-# Example required skill entry:
-# required_skills:
-#   - skill_key: qa-test-planner
-#     workflow_stage: qa-planning
-#     required: true
-required_skills: []
-optional_skills: []
+client_name: "<client-name>"
+project_type: "<project-type>"
+workflow_variant: null
 created_by: "<creator-name-or-id>"
 created_on: "<yyyy-mm-dd>"
 last_edited_by: "<editor-name-or-id>"
 last_edited_on: "<yyyy-mm-dd>"
 version: "<version>"
-status: "template"
 workflow_owner: "<workflow-owner-name-or-id>"
 approved_by: null
 approved_on: null
@@ -36,11 +25,27 @@ approved_on: null
 
 ## Scope
 
-- Identify the client represented by `client_key`, the supported project type represented by `project_key`, and the optional additional routing condition represented by `workflow_variant_key`.
+- Identify the client represented by `client_name`, the supported project type represented by `project_type`, and the optional additional routing condition represented by `workflow_variant`.
 - Describe the ticket categories, title indicators, requests, and boundaries that make this workflow applicable.
 - Explain why each routing condition is necessary so the AI can distinguish this workflow from other workflows for the same client.
 - Be precise enough that applicability can be decided from authoritative metadata without similarity guessing.
 - State explicit exclusions and unsupported conditions. Do not describe the contents or expected outcome of one specific ticket.
+
+Completed workflow filenames are based only on `client_name`, `project_type`, and the optional `workflow_variant`:
+
+```text
+skills/workflows/<client-name>_<project-type>_qaworkflow.md
+skills/workflows/<client-name>_<project-type>_<workflow-variant>_qaworkflow.md
+```
+
+Examples:
+
+```text
+skills/workflows/nclh_edm_qaworkflow.md
+skills/workflows/nclh_edm_reconciliation_qaworkflow.md
+```
+
+Other metadata fields must not affect the filename. For a completed workflow, change `document_type` to `"qa_workflow"`; `client_name` and `project_type` are mandatory, `workflow_variant` is optional and defaults to `null`, and other unavailable metadata may remain `null`. Approval fields must remain `null` until real approval is provided.
 
 ## Prerequisites
 
@@ -49,30 +54,69 @@ approved_on: null
 - Specify required detail such as authoritative source, acceptable format, responsible role, and readiness condition.
 - Make blocking and non-blocking prerequisites unambiguous, including what the AI must do when a prerequisite is absent.
 - Define reusable prerequisites only; ticket-specific inputs belong under `ticket_runs/<ticket-id>/downloads/` or `ticket_runs/<ticket-id>/generated/` as appropriate.
-- Reference reusable Agent Skills by the exact `skill_key` declared in the YAML metadata. A skill key will later resolve to `skills/agent_skills/<skill-key>/SKILL.md`; skill resolution is not implemented by this template.
+- Declare an Agent Skill directly inside the checklist item where it is required, not in the YAML metadata.
 
 ## Steps
 
-- Define the permanent ordered stages for this client/project workflow. Add, remove, or repeat the skeleton below until the full workflow is represented.
-- Explain why each step exists and how it advances the workflow, with enough detail for consistent execution across supported tickets.
-- Make ordering, dependencies, decision rules, permissions, approvals, checkpoints, artifacts, and failure routing explicit.
+- Define the permanent ordered checklist items for this client/project workflow. Add, remove, or repeat the skeleton below until the complete workflow is represented.
+- Every workflow step is a checklist item. Explain why each item exists and how it advances the workflow, with enough detail for consistent execution across supported tickets.
+- Classify each checklist item as `required`, `conditional`, `optional`, or `not_applicable` using its **Applicability** value.
+- At runtime, **Checklist status** must be one of `not_started`, `in_progress`, `completed`, `skipped`, or `blocked`.
+- Make ordering, dependencies, decision rules, permissions, approvals, checkpoints, completion evidence, artifacts, and failure routing explicit.
 - Do not assume a particular tool, database, protocol, design platform, export format, or previous proof-of-concept process unless this client/project workflow permanently requires it.
-- Do not place ticket-specific content in the step definitions. Runtime ticket information and generated outputs belong in the ticket workspace.
+- Do not place ticket-specific content in checklist definitions. Runtime ticket information and generated outputs belong in the ticket workspace.
 
-1. **Step name:** `<stable-stage-name>`
-   - **Objective:** `<permanent-outcome-this-step-must-achieve-and-why>`
-   - **Entry conditions:** `<conditions-that-must-be-true-before-the-step-starts>`
-   - **Required inputs:** `<authoritative-input-types-and-where-they-come-from>`
-   - **Required skill key, if applicable:** `<exact-skill-name-or-none>`
-   - **Permitted tools or systems:** `<explicitly-allowed-tools-systems-or-none>`
+Apply these checklist rules:
+
+- A checklist item cannot be marked `completed` until its expected checkpoint and completion evidence are satisfied.
+- A `conditional` or `optional` item may be marked `skipped` only when its applicability rule permits it.
+- Every skipped item must record a skip reason.
+- If applicability cannot be safely determined, mark the item `blocked`.
+- Missing, `null`, or unresolved values must never be treated as permission to perform an action.
+- If an action-critical value is missing or contradictory, mark the item `blocked` and follow its failure path.
+
+1. **Checklist item:** `<stable-step-name>`
+   - **Checklist item ID:** `<stable-lowercase-hyphenated-id>`
+   - **Objective:** `<permanent-outcome-this-item-must-achieve>`
+   - **Applicability:** `conditional`
+   - **Applicability rule:** `null`
+   - **Checklist status:** `not_started`
+   - **Entry conditions:** `[]`
+   - **Required inputs:** `[]`
+   - **Required Agent Skill:** `null`
+   - **Permitted tools or systems:** `[]`
    - **Ordered agent actions:**
      1. `<first-unambiguous-action>`
      2. `<next-unambiguous-action>`
      3. `<additional-actions-as-required>`
-   - **Human approval point:** `<approver-role-trigger-decision-needed-and-whether-blocking-or-none>`
-   - **Expected checkpoint:** `<observable-state-that-proves-the-step-completed>`
-   - **Generated or updated artifact:** `<artifact-path-purpose-and-update-rule-or-none>`
-   - **Failure path:** `<stop-retry-escalation-or-routing-action-for-each-defined-failure>`
+   - **Human approval required:** `false`
+   - **Human approver role:** `null`
+   - **Expected checkpoint:** `null`
+   - **Completion evidence:** `[]`
+   - **Generated or updated artifact:** `null`
+   - **Skip reason:** `null`
+   - **Failure path:** `stop_and_request_clarification`
+
+These defaults are intentionally safe:
+
+- applicability defaults to `conditional`;
+- checklist status defaults to `not_started`;
+- list values default to `[]`;
+- optional values default to `null`;
+- Agent Skill defaults to `null`;
+- human approval defaults to `false`; and
+- failure handling defaults to `stop_and_request_clarification`.
+
+A completed workflow must replace every action-critical placeholder or `null` value required for execution.
+
+When a checklist item requires an Agent Skill:
+
+- **Required Agent Skill** must contain the exact skill identifier;
+- it resolves to `skills/agent_skills/<skill-name>/SKILL.md`;
+- the value must match the skill folder name and the `name` field in `SKILL.md`;
+- the skill applies only to that checklist item;
+- control returns to the workflow checklist when the skill finishes; and
+- a missing or conflicting required skill makes the checklist item `blocked`.
 
 ## Error Handling / Fallbacks
 

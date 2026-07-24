@@ -9,26 +9,23 @@
   },
   "workflow_routing": {
     "workflows_root": "skills/workflows",
-    "workflow_file_patterns": [
-      "<client-key>_<project-key>_qaworkflow.md",
-      "<client-key>_<project-key>_<workflow-variant-key>_qaworkflow.md"
+    "workflow_template": "skills/workflows/clientname_project_qaworkflow.md",
+    "workflow_filename_pattern": "<client-name>_<project-type>_qaworkflow.md",
+    "workflow_variant_filename_pattern": "<client-name>_<project-type>_<workflow-variant>_qaworkflow.md",
+    "required_routing_fields": [
+      "client_name",
+      "project_type"
     ],
-    "template": "skills/workflows/clientname_project_qaworkflow.md",
-    "active_metadata": {
-      "document_type": "qa_workflow",
-      "template": false,
-      "executable": true,
-      "status": "approved"
-    }
-  },
-  "agent_skill_resolution": {
-    "skills_root": "skills/agent_skills",
-    "instruction_file": "SKILL.md",
-    "identifier_contract": [
-      "workflow skill_key",
-      "skill folder name",
-      "SKILL.md metadata name"
-    ]
+    "optional_routing_fields": [
+      "workflow_variant"
+    ],
+    "active_workflow_document_type": "qa_workflow",
+    "required_non_null_approval_fields": [
+      "approved_by",
+      "approved_on"
+    ],
+    "agent_skills_root": "skills/agent_skills",
+    "skill_instruction_filename": "SKILL.md"
   },
   "stable_artifact_paths": {
     "ticket_context": "generated/ticket_context.md",

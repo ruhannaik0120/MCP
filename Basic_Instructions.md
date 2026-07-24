@@ -15,7 +15,7 @@ The AI agent coordinates the QA automation project. Depending on the selected cl
 The agent must:
 
 - read this file before acting;
-- identify the client and ticket type before selecting a workflow;
+- identify the authoritative `client_name` and `project_type` before selecting a workflow;
 - follow exactly one confirmed client workflow for a ticket run;
 - keep files inside their documented ownership boundaries;
 - preserve existing user files and generated evidence;
@@ -114,35 +114,28 @@ Do not place external source documents, shared logs, or final reports in `genera
 
 Before performing client-specific QA work:
 
-1. Determine the client from authoritative ticket or user context.
-2. Extract the project type, such as `edm`, `rms`, or `poc`, from the Jira ticket title.
-3. Match the authoritative client identity to the workflow metadata `client_key`.
-4. Match the extracted project type to the workflow metadata `project_key`.
-5. When an additional routing distinction is required, determine it from authoritative ticket or user context and match it to `workflow_variant_key`.
-6. Confirm that the candidate workflow metadata has `document_type: qa_workflow`, `template: false`, `executable: true`, and `status: approved`.
-7. Read the complete workflow, state which exact workflow was selected and why, and follow only that workflow for the run unless an authorized user or designated workflow owner explicitly changes it.
+1. Determine `client_name` from authoritative ticket or authorized user context.
+2. Extract `project_type` from the Jira ticket title or other authoritative ticket metadata.
+3. Determine `workflow_variant` only when an additional variant is explicitly required.
+4. Locate the workflow using the filename convention below.
+5. Read the workflow's YAML frontmatter.
+6. Confirm that `document_type` is exactly `qa_workflow`, `client_name` matches the authoritative client, `project_type` matches the ticket project type, `workflow_variant` matches when required, and both `approved_by` and `approved_on` are not `null`.
+7. Read the complete workflow, state which exact workflow was selected and why, and use only that exact matching workflow unless an authorized user or designated workflow owner explicitly changes it.
 
 Approved workflow filenames use:
 
 ```text
-skills/workflows/<client-key>_<project-key>_qaworkflow.md
-skills/workflows/<client-key>_<project-key>_<workflow-variant-key>_qaworkflow.md
+skills/workflows/<client-name>_<project-type>_qaworkflow.md
+skills/workflows/<client-name>_<project-type>_<workflow-variant>_qaworkflow.md
 ```
 
-Examples:
+The filename is derived only from `client_name`, `project_type`, and the optional `workflow_variant`. Do not use any other metadata field to construct or select a workflow filename.
 
-```text
-skills/workflows/exampleclient_edm_qaworkflow.md
-skills/workflows/exampleclient_rms_qaworkflow.md
-skills/workflows/internal_poc_qaworkflow.md
-skills/workflows/exampleclient_edm_reconciliation_qaworkflow.md
-```
-
-The reusable file `skills/workflows/clientname_project_qaworkflow.md` is a non-active template and must never be selected for a live ticket.
+The reusable file `skills/workflows/clientname_project_qaworkflow.md` has `document_type: qa_workflow_template`. It is a non-active template and must never be used to execute a live ticket.
 
 Do not select a workflow merely because its filename or contents appear similar. Stop, explain what is missing or ambiguous, and request clarification from an authorized user when:
 
-- no exact workflow exists;
+- no exact approved workflow exists;
 - multiple workflows match;
 - routing metadata is missing;
 - the ticket type is unsupported;
@@ -152,25 +145,49 @@ Do not select a workflow merely because its filename or contents appear similar.
 
 Do not invent fallback behavior.
 
+## Following The Workflow Checklist
+
+The selected workflow contains ordered checklist items under `## Steps`. Each checklist item defines its own:
+
+- applicability and applicability rule;
+- runtime checklist status;
+- required inputs;
+- permitted tools or systems;
+- ordered agent actions;
+- required Agent Skill when applicable;
+- human approval requirements;
+- expected checkpoint;
+- completion evidence;
+- skip reason; and
+- failure path.
+
+Permitted applicability values are `required`, `conditional`, `optional`, and `not_applicable`.
+
+Permitted runtime checklist statuses are `not_started`, `in_progress`, `completed`, `skipped`, and `blocked`.
+
+Do not mark a checklist item `completed` until its expected checkpoint and completion evidence are satisfied. Missing, `null`, unresolved, or contradictory action-critical values make the checklist item `blocked`; they must never be treated as permission to proceed. Follow the checklist item's failure path whenever it becomes blocked.
+
 ## Resolving Agent Skills
 
-Reusable Agent Skills are stored at:
+Agent Skills are declared directly inside the applicable checklist item using **Required Agent Skill**. They are not declared in workflow YAML metadata.
+
+When **Required Agent Skill** is not `null`, resolve it through:
 
 ```text
-skills/agent_skills/<skill-key>/SKILL.md
+skills/agent_skills/<skill-name>/SKILL.md
 ```
 
-The workflow `skill_key`, the Agent Skill folder name, and the `name` field inside `SKILL.md` must match exactly.
+The checklist item's **Required Agent Skill** value, the Agent Skill folder name, and the `name` field inside `SKILL.md` must match exactly.
 
 Before using a required Agent Skill:
 
-1. Locate the exact `skills/agent_skills/<skill-key>/SKILL.md` path.
+1. Locate the exact `skills/agent_skills/<skill-name>/SKILL.md` path.
 2. Read the complete `SKILL.md`.
 3. Read supporting files only when `SKILL.md` references or requires them.
-4. Follow the skill only for the workflow stage that requested it.
-5. Return control to the selected workflow after completing the skill task.
+4. Follow the skill only for the checklist item that requested it.
+5. Return control to the workflow checklist after completing the skill task.
 
-An Agent Skill supports a workflow but does not determine which client/project workflow applies. If a required skill is missing, ambiguous, unavailable, or conflicts with this file, the agent must stop and explain the problem instead of substituting another skill.
+An Agent Skill supports a checklist item but does not determine which client/project workflow applies. If a required skill is missing, conflicting, ambiguous, unavailable, or conflicts with this file, mark the checklist item `blocked` and stop instead of substituting another skill.
 
 ## Tool And System Boundaries
 
